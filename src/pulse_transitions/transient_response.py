@@ -219,7 +219,7 @@ def detect_signal_levels_with_endpoints(_, y: NumberIterable, *, n: int = 100):
         tuple: (low_level, high_level)
     """
     if n * 2 > len(y):
-        raise ValueError("n is too large for the input length.")
+        raise ValueError(f"n ({n}) is too large for the input length ({len(y)}).")
 
     return sorted([np.mean(y[:n]), np.mean(y[-n:])])
 
