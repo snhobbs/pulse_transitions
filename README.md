@@ -26,5 +26,5 @@ This library implements a python version of the [Pulse and Transition Metrics fu
 There's an excellent description of the algorithms used by HP [here](https://hparchive.com/Journals/HPJ-1996-12.pdf).
 
 ### Control Library
-+ [GitHub](https://github.com/python-control/python-control) 
++ [GitHub](https://github.com/python-control/python-control)
 + [Docs](https://python-control.readthedocs.io)

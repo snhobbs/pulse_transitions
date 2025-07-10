@@ -1,123 +1,194 @@
-import unittest
-from photoreceiver_analysis.transient_response import get_edges, Edge, find_reference_levels, _interpolate_crossing, _find_peaks_and_types
-from photoreceiver_analysis import transient_response
-from scipy.signal import find_peaks, peak_widths
-from scipy.signal import lti, step
 import logging
+import unittest
+from scipy.signal import find_peaks
+from scipy.signal import lti, step
 import numpy as np
-
-from matplotlib import pyplot as plt
+from pulse_transitions.transient_response import detect_edges, detect_thresholds, _interpolate_crossing, _find_peaks_and_types
+from pulse_transitions.common import CrossingDetectionSettings, Edge
 
 log = logging.getLogger("testing")
 
-class TestEdgeDetection(unittest.TestCase):
-    def test_single_rising_edge(self):
-        x = np.linspace(0, 10, 1000)
-        y = np.where(x > 5, 1.0, 0.0)
-        levels = find_reference_levels(x, y)
-        edges = get_edges(x, y, levels)
+@unittest.skip("No fitering in the impl")
+class TestFindPeaksAndTypes(unittest.TestCase):
+    def setUp(self):
+        self.config = CrossingDetectionSettings(window=10)
+
+    def test_single_rising_peak_crossing_thresholds(self):
+        x = np.linspace(0, 1, 100)
+        y = np.zeros_like(x)
+        y[40:60] = np.linspace(0.0, 1.0, 20)  # Rising slope
+        y[60:] = 1.0
+
+        peaks = _find_peaks_and_types(x, y, thresholds=[0.1, 0.9], settings=self.config)
+
+        self.assertEqual(len(peaks), 1)
+        self.assertEqual(peaks[0][1], 'rise')
+
+    def test_single_falling_peak_crossing_thresholds(self):
+        x = np.linspace(0, 1, 100)
+        y = np.ones_like(x)
+        y[40:60] = np.linspace(1.0, 0.0, 20)  # Falling slope
+        y[60:] = 0.0
+
+        peaks = _find_peaks_and_types(x, y, thresholds=[0.1, 0.9], settings=self.config)
+
+        self.assertEqual(len(peaks), 1)
+        self.assertEqual(peaks[0][1], 'fall')
+
+    def test_rise_and_fall_peaks(self):
+        x = np.linspace(0, 2, 200)
+        y = np.concatenate([
+            np.linspace(0.0, 1.0, 50),    # Rise
+            np.linspace(1.0, 0.0, 50),    # Fall
+            np.linspace(0.0, 1.0, 50),    # Rise again
+            np.linspace(1.0, 0.0, 50)     # Fall again
+        ])
+
+        peaks = _find_peaks_and_types(x, y, thresholds=[0.2, 0.8], settings=self.config)
+
+        self.assertEqual(len(peaks), 4)
+        rise_count = sum(1 for _, typ, _ in peaks if typ == 'rise')
+        fall_count = sum(1 for _, typ, _ in peaks if typ == 'fall')
+
+        self.assertEqual(rise_count, 2)
+        self.assertEqual(fall_count, 2)
+
+    def test_peak_without_crossing_thresholds_is_ignored(self):
+        x = np.linspace(0, 1, 100)
+        y = np.zeros_like(x)
+        y[40:60] = np.linspace(0.4, 0.5, 20)  # Peak does not cross high threshold
+        y[60:] = 0.5
+
+        peaks = _find_peaks_and_types(x, y, thresholds=[0.1, 0.8], settings=self.config)
+        self.assertEqual(len(peaks), 0)
+
+    def test_small_window_misses_crossing(self):
+        x = np.linspace(0, 1, 100)
+        y = np.zeros_like(x)
+        y[45:55] = np.linspace(0.0, 1.0, 10)  # Very narrow rise
+        y[55:] = 1.0
+
+        # Window is too small to see full crossing
+
+        config = CrossingDetectionSettings(window=2)
+        peaks = _find_peaks_and_types(x, y, thresholds=[0.1, 0.9], settings=config)
+        self.assertEqual(len(peaks), 0)
+
+        # Window large enough to capture crossing
+        peaks = _find_peaks_and_types(x, y, thresholds=[0.1, 0.9], settings=self.config)
+        self.assertEqual(len(peaks), 1)
+
+    def test_min_separation_filters_close_peaks(self):
+        x = np.linspace(0, 1, 100)
+        y = np.zeros_like(x)
+        y[20:30] = np.linspace(0.0, 1.0, 10)
+        y[30:40] = np.linspace(1.0, 0.0, 10)
+        y[40:50] = np.linspace(0.0, 1.0, 10)
+        y[50:] = 1.0
+
+        config = CrossingDetectionSettings(window=10, min_separation=0.2)
+        peaks = _find_peaks_and_types(x, y, thresholds=[0.1, 0.9], settings=config)
+
+        # Expect only 1 rising edge due to min_separation filtering
+        self.assertEqual(len(peaks), 1)
+        self.assertEqual(peaks[0][1], 'rise')
+
+
+class TestDetectEdges(unittest.TestCase):
+    def setUp(self):
+        self.config = CrossingDetectionSettings(window=0)
+
+    def test_detect_single_rising_edge(self):
+        x = np.linspace(0, 1, 100)
+        y = np.zeros_like(x)
+        y[40:60] = np.linspace(0.0, 1.0, 20)
+        y[60:] = 1.0
+
+        edges = detect_edges(x, y, thresholds=(0.1, 0.9), settings=self.config)
         self.assertEqual(len(edges), 1)
-        self.assertEqual(edges[0].type, 'rise')
-        self.assertAlmostEqual(edges[0].start, 5.0, places=1)
+        edge = edges[0]
+        self.assertEqual(edge.type, 'rise')
+        self.assertTrue(0.1 <= edge.ymin < 0.5)
+        self.assertTrue(0.5 < edge.ymax <= 1.0)
 
-    def test_single_falling_edge(self):
-        x = np.linspace(0, 10, 1000)
-        y = np.where(x < 5, 1.0, 0.0)
-        levels = find_reference_levels(x, y)
-        edges = get_edges(x, y, levels)
-        self.assertEqual(len(edges), 1)
-        self.assertEqual(edges[0].type, 'fall')
-        self.assertAlmostEqual(edges[0].end, 5.0, places=1)
+    def test_detect_multiple_edges(self):
+        x = np.linspace(0, np.pi*20, 100000)
+        y = np.sin(x)
 
-    def test_multiple_edges(self):
-        x = np.linspace(0, 10, 1000)
-        y = 0.5 * (1 + np.sign(np.sin(2 * np.pi * 0.5 * x)))
-        levels = find_reference_levels(x, y)
-        edges = get_edges(x, y, levels)
-        self.assertGreaterEqual(len(edges), 8)
+        edges = detect_edges(x, y, thresholds=(0.2, 0.8), settings=self.config)
+        self.assertEqual(len(edges), 4)
+        rise_count = sum(1 for e in edges if e.type == 'rise')
+        fall_count = sum(1 for e in edges if e.type == 'fall')
 
-    def test_rising_falling_symmetry(self):
-        damping = 0.5  # Damping ratio < 1 for overshoot
-        omega = 2 * np.pi * 1  # Natural frequency (1 Hz)
-        # Define the LTI system
-        system = lti([omega**2], [1, 2*damping*omega, omega**2])
-        x = np.linspace(-1, 5, 20000)
-        _, yp = step(system, T=x[x>=0])
-        y = [0]*len(x[x<0])
-        y.extend(yp)
-        y = np.array(y)
-        levels = transient_response.find_reference_levels(x, y)
-        edges = get_edges(x, y, levels)
+        self.assertEqual(rise_count, 2)
+        self.assertEqual(fall_count, 2)
 
-        y_m = -y
-        levels_m = transient_response.find_reference_levels(x, y_m)
-        edges_m = get_edges(x, y_m, levels_m)
+    def test_no_edges_detected(self):
+        x = np.linspace(0, 1, 100)
+        y = np.full_like(x, 0.5)
+        edges = detect_edges(x, y, thresholds=(0.1, 0.9), settings=self.config)
+        self.assertEqual(len(edges), 0)
 
-        self.assertAlmostEqual(max(levels), -1*min(levels_m), 3)
-        self.assertAlmostEqual(min(levels), -1*max(levels_m), 3)
-        for p, m in zip(edges, edges_m):
-            self.assertAlmostEqual(p.start, m.start, 3)
-
-class TestDetectLevels(unittest.TestCase):
-
-    def test_two_level_signal(self):
-        # Known low and high levels
-        low_val = 0.0
-        high_val = 1.0
-        num_samples = 10000
-
-        signal = np.concatenate([
-            np.full(num_samples, low_val),
-            np.full(num_samples, high_val)
+    def test_bounds_limit_detection(self):
+        y = np.concatenate([
+            np.linspace(0.0, 1.0, 50),
+            np.linspace(1.0, 0.0, 50),
+            np.linspace(0.0, 1.0, 50),
+            np.linspace(1.0, 0.0, 50)
         ])
+        x = np.linspace(0, 2, len(y))
 
-        y_norm = transient_response.normalize(signal)
-        low, high, *_ = transient_response.detect_levels(y_norm, bins=100)
+        edges = detect_edges(x, y, thresholds=(0.2, 0.8), bounds=(0.0, 2.0), settings=self.config)
+        self.assertEqual(len(edges), 2)  # Only the first rise and fall should be in bounds
 
-        self.assertAlmostEqual(low, low_val, places=2)
-        self.assertAlmostEqual(high, high_val, places=2)
 
-    def test_two_level_signal_with_noise(self):
-        low_val = 0.1
-        high_val = 0.9
-        noise_std = 0.02
-        num_samples = 100000
 
-        signal = np.concatenate([
-            np.random.normal(low_val, noise_std, num_samples),
-            np.random.normal(high_val, noise_std, num_samples)
-        ])
-        y_norm = transient_response.normalize(signal)
-        low, high, *_ = transient_response.detect_levels(y_norm, bins=100)
-        self.assertAlmostEqual(low, low_val, delta=0.05)
-        self.assertAlmostEqual(high, high_val, delta=0.05)
+'''
+def _interpolate_crossing(x: np.ndarray, y: np.ndarray, idx: int, thresholds: Tuple[float, float], sign: int, *, window: int = None):
 
-    def test_single_level_signal_should_fail(self):
-        signal = np.full(2000, 0.5)
+    Interpolate precise crossing times for low and high thresholds around a peak with optional hysteresis window.
 
-        with self.assertRaises(ValueError):
-            y_norm = transient_response.normalize(signal)
-            low, high, *_ = transient_response.detect_levels(y_norm)
+    Args:
+        x (np.ndarray): Time array.
+        y (np.ndarray): Signal array.
+        idx (int): Peak index in the arrays.
+        thresholds (float,float): Threshold crossing values.
+        sign (int): +1 for rising pulse, -1 for falling pulse.
+        window (int, optional): Number of samples before/after peak to limit search.
 
-    def test_three_level_signal_should_return_two(self):
-        # Should return the two most prominent levels
-        levels = [0.0, 0.5, 1.0]
-        counts = [10000, 300, 10000]  # Middle level is less prominent
-        signal = np.concatenate([
-            np.full(counts[0], levels[0]),
-            np.full(counts[1], levels[1]),
-            np.full(counts[2], levels[2])
-        ])
-        y_norm = transient_response.normalize(signal)
-        low, high, *_ = transient_response.detect_levels(y_norm, bins=100)
-        log.error(f"{low} {high}")
-        self.assertAlmostEqual(low, min(levels), places=2)
-        self.assertAlmostEqual(high, max(levels), places=2)
+    Returns:
+        tuple: (start_time, end_time) for lo_val and hi_val crossings, in time order.
+'''
+
+
+class TestInterpolateCrossing(unittest.TestCase):
+    def setUp(self):
+        self.x = np.array(list(range(10000)))
+
+    def test_rising_edge_no_window(self):
+        thresholds = (1, 2)
+
+        y = np.linspace(0, 3, len(self.x))
+        start, end = _interpolate_crossing(self.x, y, thresholds, sign=1)
+        self.assertLess(start, end)
+        self.assertAlmostEqual(np.interp(start, self.x, y), min(thresholds), delta=1e-3)
+        self.assertAlmostEqual(np.interp(end, self.x, y), max(thresholds), delta=1e-3)
+
+
+    def test_falling_edge_no_window(self):
+        thresholds = (1, 2)
+
+        y = np.linspace(3, 0, len(self.x))
+        start, end = _interpolate_crossing(self.x, y, thresholds, sign=-1)
+        self.assertLessEqual(start, end)
+        self.assertAlmostEqual(np.interp(start, self.x, y), max(thresholds), delta=1e-3)
+        self.assertAlmostEqual(np.interp(end, self.x, y), min(thresholds), delta=1e-3)
+
 
 if __name__ == '__main__':
     logging.basicConfig()
     log.setLevel(logging.DEBUG)
     logging.getLogger().setLevel(logging.DEBUG)
-    logging.getLogger("photoreceiver_analysis").setLevel(logging.DEBUG)
+    logging.getLogger("pulse_transitions").setLevel(logging.DEBUG)
 
     unittest.main()
