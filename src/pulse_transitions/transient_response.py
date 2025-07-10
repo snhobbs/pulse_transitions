@@ -7,14 +7,14 @@ from typing import Iterable, Union, Optional, Tuple
 import logging
 
 import numpy as np
-from scipy.signal import find_peaks
 from scipy.ndimage import gaussian_filter1d
 from scipy.interpolate import interp1d
 from .common import PairedEdge, CrossingDetectionSettings, Edge, Peak
-from .impl import normalize, denormalize, closest_index, _interpolate_crossing, \
-                  _find_peaks_and_types, detect_signal_levels_with_derivative, detect_signal_levels_with_endpoints, \
-                  detect_signal_levels_with_endpoints, filter_overlapping_edges, \
-                  detect_signal_levels_with_histogram, detect_signal_levels_with_derivative, detect_signal_levels_with_endpoints
+from . import impl
+#from .impl import normalize, denormalize, closest_index, _interpolate_crossing, \
+#                  _find_peaks_and_types, detect_signal_levels_with_derivative, detect_signal_levels_with_endpoints, \
+#                  detect_signal_levels_with_endpoints, filter_overlapping_edges, \
+#                  detect_signal_levels_with_histogram, detect_signal_levels_with_derivative, detect_signal_levels_with_endpoints
 
 
 NumberIterable = Union[np.ndarray, Iterable[Union[int, float]]]
@@ -27,9 +27,9 @@ def detect_signal_levels(x: NumberIterable, y: NumberIterable, method="histogram
         (low_level, high_level)
     """
     methods = {
-        "histogram": detect_signal_levels_with_histogram,
-        "derivative": detect_signal_levels_with_derivative,
-        "endpoint": detect_signal_levels_with_endpoints,
+        "histogram": impl.detect_signal_levels_with_histogram,
+        "derivative": impl.detect_signal_levels_with_derivative,
+        "endpoint": impl.detect_signal_levels_with_endpoints,
     }
 
     if method not in methods:
@@ -101,21 +101,28 @@ def detect_edges(x: NumberIterable, y: NumberIterable, thresholds, *, bounds=Non
         x, y = x[mask], y[mask]
 
     # Find peaks by derivative only
-    peaks : Tuple[Peak] = _find_peaks_and_types(x, y, thresholds=thresholds, settings=settings)
+    peaks : Tuple[Peak] = impl._find_peaks_and_types(x, y, thresholds=thresholds, settings=settings)
     edges = []
     for peak in peaks:
+        xbound = x
+        ybound = y
+
         try:
-            xbound = x
-            ybound = y
+            if settings.window > 0:
+                # FIXME instead of just a window use the multiple edges to find an appropriate separation between points
+                mask = (x>(peak.start-settings.window/2)) & (x<(peak.end+settings.window/2))
+                assert peak.end > peak.start
+                xbound = xbound[mask]
+                ybound = ybound[mask]
             # Interpolate the crossing point to find a more accurate crossing
-            x1, x2 = _interpolate_crossing(
-                x=xbound, y=ybound, window=settings.window,
+            x1, x2 = impl._interpolate_crossing(
+                x=xbound, y=ybound,
                 thresholds=thresholds,
                 sign=peak.sign
             )
 
             # Confirm that the segment around the peak actually crosses both levels
-            idxs = [closest_index(xbound, x1), closest_index(xbound, x2)]
+            idxs = [impl.closest_index(xbound, x1), impl.closest_index(xbound, x2)]
 
             # Handle discontinuous edge
             if idxs[0] == idxs[1]:
@@ -133,7 +140,7 @@ def detect_edges(x: NumberIterable, y: NumberIterable, thresholds, *, bounds=Non
             log.debug(msg)
             continue
 
-    return filter_overlapping_edges(edges)
+    return edges
 
 
 def calculate_overshoot(y: NumberIterable, levels: tuple[float, float]):
@@ -200,7 +207,7 @@ def statelevels(A: NumberIterable, nbins: int = 100, method="mode", bounds: Tupl
     Estimate state-level for bilevel waveform A using histogram method.
     '''
     y = A
-    low_level, high_level, bin_centers, smoothed_hist, _ = detect_signal_levels_with_histogram(None, y, nbins=nbins, smooth_sigma=0)
+    low_level, high_level, bin_centers, smoothed_hist, _ = impl.detect_signal_levels_with_histogram(None, y, nbins=nbins, smooth_sigma=0)
     return (low_level, high_level), bin_centers, smoothed_hist
 
 

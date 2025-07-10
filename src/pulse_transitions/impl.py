@@ -57,7 +57,7 @@ def smooth_zero_phase(y: np.ndarray, normal_cutoff: int, fs: float, order: int =
     return filtfilt(b, a, y)
 
 
-def _interpolate_crossing(x: np.ndarray, y: np.ndarray, thresholds: Tuple[float, float], sign: int, window: Optional[float]=None):
+def _interpolate_crossing(x: np.ndarray, y: np.ndarray, thresholds: Tuple[float, float], sign: int):
     '''
     Interpolate precise crossing times for low and high thresholds around a peak with optional hysteresis window.
 
@@ -189,19 +189,35 @@ def _find_peaks_and_types(
     # Iterate through all points in a state machine, ends up taking the first than last crossing.
     # Will only find one edge per full crossing.
 
-    # + -> 0 -> -
-    state = get_state(y[0], thresholds)
-    last_state = state
-    i1 = 0
-    for i, pt in enumerate(y):
-        next_state = get_state(pt, thresholds)
-        if last_state == next_state:
-            continue
-        last_state = state
-        state = next_state
+    prev_state = get_state(yfilt[0], thresholds=thresholds)
+    edge_in_progress = False
+    i1 = None
+    direction = 0
 
-        # transition
-        raw_peaks.append(Peak(start=x[i1], end=x[i], sign=state))
+    for i, val in enumerate(yfilt):
+        state = get_state(val, thresholds=thresholds)
+
+        if state == prev_state:
+            continue
+
+        if not edge_in_progress:
+            if prev_state != 0 and state == 0:
+                # Entering transition region from a known level
+                i1 = i
+                direction = -prev_state
+                edge_in_progress = True
+
+        else:
+            if state == direction:
+                # Completed transition to opposite level
+                i2 = i
+                raw_peaks.append(Peak(start=x[i1], end=x[i2], sign=direction))
+                edge_in_progress = False
+                i1 = None
+                direction = 0
+
+        prev_state = state
+
     return raw_peaks
 
 

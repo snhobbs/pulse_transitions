@@ -16,13 +16,11 @@ class GroupStrategy(StrEnum):
 
 class CrossingDetectionSettings(StrictBaseModel):
     '''
-    window (int): Max width (samples) for expanding peak.
-    min_separation (float): Minimum time between edges.
-    group_strategy (str): 'first', 'last', 'mean', or 'median'.
-    derivative_threshold (float): Minimum |dydx| to be part of peak width.
-    hysteresis_window (float): Crossing point hysteresis
+    window (float): Area around an edge to isolate for threshold crossing
+    filter_order (int): Butterworth filter order for smoothing before edge finding
+    filter_cutoff(float): Fraction of Nyquist frequency to filter off
     '''
-    window: int = 1
+    window: float = 0
     filter_order: int = 3
     filter_cutoff: float = 0.9
 
