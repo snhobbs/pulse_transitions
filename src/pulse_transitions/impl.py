@@ -5,12 +5,11 @@ import numpy as np
 from scipy.signal import find_peaks
 from scipy.ndimage import gaussian_filter1d
 from scipy.signal import butter, filtfilt
-from .common import CrossingDetectionSettings, GroupStrategy, Peak, closest_index, Edge
+from .common import CrossingDetectionSettings, GroupStrategy, Peak, closest_index, Edge, EdgeSign
 
 
 NumberIterable = Union[np.ndarray, Iterable[Union[int, float]]]
 log = logging.getLogger("pulse_transitions")
-
 
 def normalize(y: NumberIterable) -> np.ndarray:
     '''
@@ -57,7 +56,7 @@ def smooth_zero_phase(y: np.ndarray, normal_cutoff: int, fs: float, order: int =
     return filtfilt(b, a, y)
 
 
-def _interpolate_crossing(x: np.ndarray, y: np.ndarray, thresholds: Tuple[float, float], sign: int):
+def _interpolate_crossing(x: np.ndarray, y: np.ndarray, thresholds: Tuple[float, float], sign: EdgeSign):
     '''
     Interpolate precise crossing times for low and high thresholds around a peak with optional hysteresis window.
 
@@ -65,7 +64,7 @@ def _interpolate_crossing(x: np.ndarray, y: np.ndarray, thresholds: Tuple[float,
         x (np.ndarray): Time array.
         y (np.ndarray): Signal array.
         thresholds (float,float): Threshold crossing values.
-        sign (int): +1 for rising pulse, -1 for falling pulse.
+        sign (EdgeSign): EdgeSign.rising or EdgeSign.falling
 
     Returns:
         tuple: (start_time, end_time) for lo_val and hi_val crossings, in time order.
@@ -74,12 +73,13 @@ def _interpolate_crossing(x: np.ndarray, y: np.ndarray, thresholds: Tuple[float,
     hi_val = max(thresholds)
 
     n = len(y)
-    if sign == 1:
+    if sign == EdgeSign.rising:
         # rising edge
         pre_mask = (y <= lo_val)
         post_mask = (y >= hi_val)
     else:
         # falling edge
+        assert sign == EdgeSign.falling
         pre_mask = (y >= hi_val)
         post_mask = (y <= lo_val)
 
@@ -179,7 +179,7 @@ def _find_peaks_and_types(
 
     raw_peaks = []
 
-    def get_state(pt, thresholds):
+    def get_state(pt, thresholds) -> int:
         if pt >= max(thresholds):
             return 1
         if pt <= min(thresholds):
@@ -211,7 +211,8 @@ def _find_peaks_and_types(
             if state == direction:
                 # Completed transition to opposite level
                 i2 = i
-                raw_peaks.append(Peak(start=x[i1], end=x[i2], sign=direction))
+                raw_peaks.append(
+                    Peak(start=x[i1], end=x[i2], sign=EdgeSign(direction)))
                 edge_in_progress = False
                 i1 = None
                 direction = 0

@@ -9,7 +9,7 @@ import logging
 import numpy as np
 from scipy.ndimage import gaussian_filter1d
 from scipy.interpolate import interp1d
-from .common import PairedEdge, CrossingDetectionSettings, Edge, Peak
+from .common import PairedEdge, CrossingDetectionSettings, Edge, Peak, EdgeSign
 from . import impl
 #from .impl import normalize, denormalize, closest_index, _interpolate_crossing, \
 #                  _find_peaks_and_types, detect_signal_levels_with_derivative, detect_signal_levels_with_endpoints, \
@@ -23,6 +23,7 @@ log = logging.getLogger("pulse_transitions")
 
 def detect_signal_levels(x: NumberIterable, y: NumberIterable, method="histogram", **kwargs):
     """
+    Detect the levels of a 2-mode system using one of several methods.
     Returns:
         (low_level, high_level)
     """
@@ -39,7 +40,9 @@ def detect_signal_levels(x: NumberIterable, y: NumberIterable, method="histogram
     return low_level, high_level
 
 
-def calculate_thresholds(x: NumberIterable, y: NumberIterable, levels: tuple[float, float], low_fraction=0.1, high_fraction=0.9):
+def calculate_thresholds(x: NumberIterable, y: NumberIterable,
+                         levels: Tuple[float, float],
+                         thresholds: Tuple[float,float]=(0.1, 0.9)):
     x = np.asarray(x, dtype=float)
     y = np.asarray(y, dtype=float)
 
@@ -48,11 +51,13 @@ def calculate_thresholds(x: NumberIterable, y: NumberIterable, levels: tuple[flo
     assert diff >= 0
 
     return list(sorted((
-        low + low_fraction * diff,
-        low + high_fraction * diff
+        low + min(thresholds) * diff,
+        low + max(thresholds) * diff
     )))
 
-def detect_thresholds(x: NumberIterable, y: NumberIterable, method='histogram', low_fraction=0.1, high_fraction=0.9, **kwargs):
+def detect_thresholds(x: NumberIterable, y: NumberIterable, method='histogram',
+                      thresholds: Tuple[float,float]=(0.1, 0.9),
+                      **kwargs):
     '''
     Estimate low and high reference levels using flat portions of the signal where the derivative is minimal.
 
@@ -73,7 +78,56 @@ def detect_thresholds(x: NumberIterable, y: NumberIterable, method='histogram', 
     return calculate_thresholds(x, y, [low, high], low_fraction, high_fraction)
 
 
-def detect_edges(x: NumberIterable, y: NumberIterable, thresholds, *, bounds=None, settings: CrossingDetectionSettings = None) -> list[Edge]:
+def detect_first_edge(x: NumberIterable, y: NumberIterable,
+                      thresholds: Tuple[float,float]=(0.1, 0.9),
+                      sign: Union[EdgeSign, int],
+                      *, settings: Optional[CrossingDetectionSettings] = None) -> Optional[Edge]:
+    '''
+    Detect the first edge in a data series.
+    return Edge
+    '''
+    assert len(x)
+    assert len(y)
+    xbound = x
+    ybound = y
+    if settings is None:
+        settings = CrossingDetectionSettings()
+
+    if settings.window > 0:
+        # FIXME instead of just a window use the multiple edges to find an appropriate separation between points
+        mask = (x>(peak.start-settings.window/2)) & (x<(peak.end+settings.window/2))
+        assert peak.end > peak.start
+        xbound = xbound[mask]
+        ybound = ybound[mask]
+    # Interpolate the crossing point to find a more accurate crossing
+
+    if min(y) > min(thresholds) or max(y) < max(thresholds):
+        return None
+
+    x1, x2 = impl._interpolate_crossing(
+        x=xbound, y=ybound,
+        thresholds=thresholds,
+        sign=EdgeSign(sign)
+    )
+
+    # Confirm that the segment around the peak actually crosses both levels
+    idxs = [impl.closest_index(xbound, x1), impl.closest_index(xbound, x2)]
+
+    # Handle discontinuous edge
+    if idxs[0] == idxs[1]:
+        idxs = [max([0, idxs[0]-1]), min([len(xbound), idxs[0]+1])]
+
+    # Make an edge object
+    return Edge(
+            start=x1, end=x2, sign=sign,
+            thresholds=thresholds,
+            ymin=min(ybound[idxs]), ymax=max(ybound[idxs]))
+
+
+def detect_edges(x: NumberIterable, y: NumberIterable,
+                 thresholds: Tuple[float,float]=(0.1, 0.9),
+                 *, bounds=None,
+                 settings: Optional[CrossingDetectionSettings] = None) -> list[Edge]:
     '''
     Detects rising and falling edges in a signal using derivative peak widths and interpolated threshold crossings.
 
@@ -89,9 +143,6 @@ def detect_edges(x: NumberIterable, y: NumberIterable, thresholds, *, bounds=Non
     '''
      # FIXME this should split the signals into each par of signal
 
-    if settings is None:
-        settings = CrossingDetectionSettings()
-
     x = np.asarray(x, dtype=float)
     y = np.asarray(y, dtype=float)
 
@@ -104,46 +155,18 @@ def detect_edges(x: NumberIterable, y: NumberIterable, thresholds, *, bounds=Non
     peaks : Tuple[Peak] = impl._find_peaks_and_types(x, y, thresholds=thresholds, settings=settings)
     edges = []
     for peak in peaks:
-        xbound = x
-        ybound = y
-
         try:
-            if settings.window > 0:
-                # FIXME instead of just a window use the multiple edges to find an appropriate separation between points
-                mask = (x>(peak.start-settings.window/2)) & (x<(peak.end+settings.window/2))
-                assert peak.end > peak.start
-                xbound = xbound[mask]
-                ybound = ybound[mask]
-            # Interpolate the crossing point to find a more accurate crossing
-            x1, x2 = impl._interpolate_crossing(
-                x=xbound, y=ybound,
-                thresholds=thresholds,
-                sign=peak.sign
-            )
-
-            # Confirm that the segment around the peak actually crosses both levels
-            idxs = [impl.closest_index(xbound, x1), impl.closest_index(xbound, x2)]
-
-            # Handle discontinuous edge
-            if idxs[0] == idxs[1]:
-                idxs = [max([0, idxs[0]-1]), min([len(xp), idxs[0]+1])]
-
-            # Make an edge object
-            edge = Edge(
-                    start=x1, end=x2, sign=peak.sign,
-                    thresholds=thresholds,
-                    ymin=min(ybound[idxs]), ymax=max(ybound[idxs]))
-
+            edge = detect_first_edge(x, y, thresholds, sign=peak.sign,
+                                     settings=settings)
             edges.append(edge)
         except (IndexError, ValueError) as e:
             msg = f"Skipping peak {peak.start}-{peak.end}, interpolation not possible: {e}"
             log.debug(msg)
             continue
-
     return edges
 
 
-def calculate_overshoot(y: NumberIterable, levels: tuple[float, float]):
+def calculate_overshoot(y: NumberIterable, levels: Tuple[float, float]):
     '''
     Take the data and an Edge object, returns the overshoot / undershoot of the edge.
     thresholds (tuple): Low and high thresholds for signal.
@@ -179,13 +202,13 @@ def pair_edges(edges: list[Edge], *, max_gap: float = None) -> list[PairedEdge]:
     used_indices = set()
 
     for i, first_edge in enumerate(edges):
-        if first_edge.type != 'rise' or i in used_indices:
+        if first_edge.sign != EdgeSign.rising or i in used_indices:
             continue
         for j in range(i + 1, len(edges)):
             if j in used_indices:
                 continue
             second_edge = edges[j]
-            if second_edge.type == 'fall':
+            if second_edge.sign == EdgeSign.falling:
                 if max_gap is not None and (second_edge.start - first_edge.end) > max_gap:
                     break
                 pair = PairedEdge(rise=first_edge, fall=second_edge)
@@ -197,12 +220,51 @@ def pair_edges(edges: list[Edge], *, max_gap: float = None) -> list[PairedEdge]:
     return pairs
 
 
+def _get_xtime_from_t_fs(x: NumberIterable,
+                         fs: Optional[float]=1,
+                         t: Optional[NumberIterable]=None):
+    x = np.asarray(x)
+    # Time vector handling
+    if t is not None:
+        t = np.asarray(t)
+        if t.shape != x.shape:
+            raise ValueError("t must be the same shape as x")
+        # Use a spline to resample signal uniformly
+        f = interp1d(t, x, kind='cubic', fill_value='extrapolate')
+        t_uniform = np.linspace(t[0], t[-1], len(x))
+        x_uniform = f(t_uniform)
+    else:
+        # Uniform time base
+        t_uniform = np.arange(len(x)) / fs
+        x_uniform = x
+    return x_uniform, t_uniform
+
+
+def _detect_edge_wrapper(sign: EdgeSign, x: NumberIterable, fs: Optional[float]=1,
+             t: Optional[NumberIterable]=None,
+             levels: Optional[Tuple[float,float]]=None,
+             thresholds: Tuple[float,float]=(0.1, 0.9),
+             settings: Optional[CrossingDetectionSettings]=None, **kwargs) -> Optional[Edge]:
+    x_uniform, t_uniform = _get_xtime_from_t_fs(x=x, fs=fs, t=t)
+    if not levels:
+        levels, *_ = statelevels(A=x_uniform, **kwargs)
+
+    level_diff = max(levels) - min(levels)
+    edge_thresholds = (
+        min(levels) + level_diff*min(thresholds),
+        min(levels) + level_diff*max(thresholds))
+
+    return detect_first_edge(x=t_uniform, y=x_uniform,
+                             thresholds=edge_thresholds,
+                             sign=sign, settings=settings)
+
 #=========================
 # Matlab naming starts
 #=========================
 
 
-def statelevels(A: NumberIterable, nbins: int = 100, method="mode", bounds: Tuple[float, float] = None, **kwargs):
+def statelevels(A: NumberIterable, nbins: int = 100, method="mode",
+                bounds: Tuple[float, float] = None, **kwargs):
     '''
     Estimate state-level for bilevel waveform A using histogram method.
     '''
@@ -211,7 +273,34 @@ def statelevels(A: NumberIterable, nbins: int = 100, method="mode", bounds: Tupl
     return (low_level, high_level), bin_centers, smoothed_hist
 
 
-def midcross(x, Fs: float = 1, t: NumberIterable = None, levels = None, **kwargs):
+def risetime(x: NumberIterable, fs: Optional[float]=1,
+             t: Optional[NumberIterable]=None,
+             levels: Optional[Tuple[float,float]]=None,
+             thresholds: Tuple[float,float]=(0.1, 0.9),
+             settings: Optional[CrossingDetectionSettings]=None, **kwargs) -> Optional[Edge]:
+    return _detect_edge_wrapper(sign=EdgeSign.rising,
+                        x=x, fs=fs,
+                        t=t,
+                        levels=levels,
+                        thresholds=thresholds,
+                        settings=settings, **kwargs)
+
+def falltime(x: NumberIterable, fs: Optional[float]=1,
+             t: Optional[NumberIterable]=None,
+             levels: Optional[Tuple[float,float]]=None,
+             thresholds: Tuple[float,float]=(0.1, 0.9),
+             settings: Optional[CrossingDetectionSettings]=None, **kwargs) -> Optional[Edge]:
+    return _detect_edge_wrapper(sign=EdgeSign.falling,
+                        x=x, fs=fs,
+                        t=t,
+                        levels=levels,
+                        thresholds=thresholds,
+                        settings=settings, **kwargs)
+
+def midcross(x, fs:Optional[float] =1,
+             t: Optional[NumberIterable]=None,
+             levels: Optional[Tuple[float,float]]=None,
+             **kwargs):
     '''
     Mid-reference level crossing for bilevel waveform.
     Calculate statelevels and return the average.
@@ -226,21 +315,7 @@ def midcross(x, Fs: float = 1, t: NumberIterable = None, levels = None, **kwargs
     Returns:
         float: Time or index of mid-reference crossing.
     '''
-    x = np.asarray(x)
-    # Time vector handling
-    if t is not None:
-        t = np.asarray(t)
-        if t.shape != x.shape:
-            raise ValueError("t must be the same shape as x")
-        # Use a spline to resample signal uniformly
-        f = interp1d(t, x, kind='cubic', fill_value='extrapolate')
-        t_uniform = np.linspace(t[0], t[-1], len(x))
-        x_uniform = f(t_uniform)
-    else:
-        # Uniform time base
-        t_uniform = np.arange(len(x)) / Fs
-        x_uniform = x
-
+    x_uniform, t_uniform = _get_xtime_from_t_fs(x=x, fs=fs, t=t)
     if not levels:
         levels, *_ = statelevels(A=x_uniform, **kwargs)
 
@@ -264,7 +339,9 @@ def midcross(x, Fs: float = 1, t: NumberIterable = None, levels = None, **kwargs
 
     return t_cross
 
-def overshoot(x, levels = None, **kwargs):
+def overshoot(x: NumberIterable,
+              levels: Optional[Tuple[float, float]]=None,
+              **kwargs):
     if not levels:
         levels, *_ = statelevels(A=x, **kwargs)
 
@@ -288,7 +365,9 @@ def overshoot(x, levels = None, **kwargs):
     return overshoot_frac
 
 
-def undershoot(x, levels: Optional[Tuple[float, float]] = None, **kwargs) -> float:
+def undershoot(x: NumberIterable,
+               levels: Optional[Tuple[float, float]]=None,
+               **kwargs) -> float:
     '''
     Compute normalized undershoot immediately after the step edge.
 

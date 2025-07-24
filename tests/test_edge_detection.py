@@ -3,8 +3,9 @@ import unittest
 from scipy.signal import find_peaks
 from scipy.signal import lti, step
 import numpy as np
-from pulse_transitions.transient_response import detect_edges, detect_thresholds, _interpolate_crossing, _find_peaks_and_types
-from pulse_transitions.common import CrossingDetectionSettings, Edge
+from pulse_transitions.transient_response import detect_edges, detect_thresholds
+from pulse_transitions.impl import _interpolate_crossing, _find_peaks_and_types
+from pulse_transitions.common import CrossingDetectionSettings, Edge, EdgeSign
 
 log = logging.getLogger("testing")
 
@@ -169,7 +170,7 @@ class TestInterpolateCrossing(unittest.TestCase):
         thresholds = (1, 2)
 
         y = np.linspace(0, 3, len(self.x))
-        start, end = _interpolate_crossing(self.x, y, thresholds, sign=1)
+        start, end = _interpolate_crossing(self.x, y, thresholds, sign=EdgeSign.rising)
         self.assertLess(start, end)
         self.assertAlmostEqual(np.interp(start, self.x, y), min(thresholds), delta=1e-3)
         self.assertAlmostEqual(np.interp(end, self.x, y), max(thresholds), delta=1e-3)
@@ -179,7 +180,7 @@ class TestInterpolateCrossing(unittest.TestCase):
         thresholds = (1, 2)
 
         y = np.linspace(3, 0, len(self.x))
-        start, end = _interpolate_crossing(self.x, y, thresholds, sign=-1)
+        start, end = _interpolate_crossing(self.x, y, thresholds, sign=EdgeSign.falling)
         self.assertLessEqual(start, end)
         self.assertAlmostEqual(np.interp(start, self.x, y), max(thresholds), delta=1e-3)
         self.assertAlmostEqual(np.interp(end, self.x, y), min(thresholds), delta=1e-3)

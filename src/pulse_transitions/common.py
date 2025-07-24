@@ -1,8 +1,13 @@
-from pydantic import BaseModel, model_validator, Extra
-from enum import StrEnum
+from enum import Enum, StrEnum
 from dataclasses import dataclass
 from typing import Tuple
+from pydantic import BaseModel, model_validator, Extra
 import numpy as np
+
+class EdgeSign(Enum):
+    falling = -1
+    rising = 1
+    none = 0
 
 class StrictBaseModel(BaseModel):
     class Config:
@@ -39,13 +44,7 @@ class Edge(BaseModel):
     ymin: float
     ymax: float
     thresholds: Tuple[float, float]
-    sign: int
-
-    @property
-    def type(self):
-        if self.sign > 0:
-            return 'rise'
-        return 'fall'
+    sign: EdgeSign
 
     @model_validator(mode="after")
     def validate_edge(self) -> "Edge":
@@ -85,10 +84,12 @@ class PairedEdge(BaseModel):
 
     @property
     def is_valid(self) -> bool:
-        return (self.rise.type == 'rise') and (self.fall.type == 'fall') and (self.fall.start >= self.rise.end)
+        return ((self.rise.sign == EdgeSign.rising) and
+                (self.fall.sign == EdgeSign.falling) and
+                (self.fall.start >= self.rise.end))
 
-@dataclass
-class Peak:
-    sign: int # +1 for rising, -1 for falling
+
+class Peak(BaseModel):
+    sign: EdgeSign
     start: float
     end: float # x value
