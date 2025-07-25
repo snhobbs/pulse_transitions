@@ -1,8 +1,11 @@
-from enum import Enum, StrEnum
-from dataclasses import dataclass
+from enum import Enum
+from enum import StrEnum
 from typing import Tuple
-from pydantic import BaseModel, model_validator, Extra
-import numpy as np
+
+from pydantic import BaseModel
+from pydantic import Extra
+from pydantic import model_validator
+
 
 class EdgeSign(Enum):
     falling = -1
@@ -20,17 +23,17 @@ class GroupStrategy(StrEnum):
     last = "last"
 
 class CrossingDetectionSettings(StrictBaseModel):
-    '''
+    """
     window (float): Area around an edge to isolate for threshold crossing
     filter_order (int): Butterworth filter order for smoothing before edge finding
     filter_cutoff(float): Fraction of Nyquist frequency to filter off
-    '''
+    """
     window: float = 0
     filter_order: int = 3
     filter_cutoff: float = 0.9
 
 class Edge(BaseModel):
-    '''
+    """
     Represents an edge transition in a signal.
 
     Attributes:
@@ -38,7 +41,7 @@ class Edge(BaseModel):
         end (float): Time of the high threshold crossing.
         dx (float): Duration between low and high threshold crossings.
         type (str): 'rise' or 'fall'.
-    '''
+    """
     start: float
     end: float
     ymin: float

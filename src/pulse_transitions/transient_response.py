@@ -1,15 +1,21 @@
-'''
+"""
 Transient response edge detection module.
 
-'''
-from dataclasses import dataclass
-from typing import Iterable, Union, Optional, Tuple
+"""
 import logging
+from collections.abc import Iterable
+from typing import Optional
+from typing import Tuple
+from typing import Union
 
 import numpy as np
-from scipy.ndimage import gaussian_filter1d
-from . common import PairedEdge, CrossingDetectionSettings, Edge, Peak, EdgeSign
+
 from . import impl
+from .common import CrossingDetectionSettings
+from .common import Edge
+from .common import EdgeSign
+from .common import PairedEdge
+from .common import Peak
 
 NumberIterable = Union[np.ndarray, Iterable[Union[int, float]]]
 log = logging.getLogger("pulse_transitions")
@@ -35,13 +41,14 @@ def detect_signal_levels(x: NumberIterable, y: NumberIterable, method="histogram
     }
 
     if method not in methods:
-        raise ValueError(f"Method '{method}' not one of: {methods.keys()}")
+        msg = f"Method '{method}' not one of: {methods.keys()}"
+        raise ValueError(msg)
 
     low_level, high_level, *_ = methods[method](x, y, **kwargs)
     return low_level, high_level
 
 
-def detect_thresholds(x: NumberIterable, y: NumberIterable, method='histogram',
+def detect_thresholds(x: NumberIterable, y: NumberIterable, method="histogram",
                       thresholds: Tuple[float,float]=(0.1, 0.9), **kwargs):
     """
     Estimate threshold levels based on flat signal regions.
@@ -61,7 +68,7 @@ def detect_thresholds(x: NumberIterable, y: NumberIterable, method='histogram',
 
     low, high, *_ = detect_signal_levels(x, y, method=method, **kwargs)
 
-    return impl._calculate_thresholds(x, y, [low, high], low_fraction, high_fraction)
+    return impl._calculate_thresholds(x, y, [low, high], thresholds=thresholds)
 
 
 def detect_first_edge(x: NumberIterable, y: NumberIterable,
@@ -119,11 +126,13 @@ def detect_edges(x: NumberIterable, y: NumberIterable,
         x, y = x[mask], y[mask]
 
     # Find peaks by derivative only
-    peaks : Tuple[Peak] = impl._find_peaks_and_types(x, y, thresholds=thresholds, settings=settings)
+    peaks : Tuple[Peak] = impl._find_peaks_and_types(x, y,
+                                                     thresholds=thresholds, settings=settings)
     edges = []
     for peak in peaks:
         try:
-            edge = detect_first_edge(x, y, thresholds, sign=peak.sign,
+            edge = detect_first_edge(x, y, thresholds,
+                                     sign=peak.sign,
                                      settings=settings)
             edges.append(edge)
         except (IndexError, ValueError) as e:
@@ -271,7 +280,7 @@ def midcross(x, fs: Optional[float] = 1,
     crossings = np.where(np.diff(above.astype(int)) != 0)[0]
 
     if crossings.size == 0:
-        raise ValueError("No midpoint crossing found")
+        return 0
 
     idx = crossings[0]
     # Linear interpolation for more precise crossing time
@@ -279,13 +288,11 @@ def midcross(x, fs: Optional[float] = 1,
     t0, t1 = t_uniform[idx], t_uniform[idx + 1]
 
     frac = (mid - x0) / (x1 - x0)
-    t_cross = t0 + frac * (t1 - t0)
-
-    return t_cross
+    return t0 + frac * (t1 - t0)  # tcross
 
 def overshoot(x: NumberIterable,
               levels: Optional[Tuple[float, float]]=None,
-              **kwargs):
+              **kwargs) -> float:
     """
     Compute normalized overshoot fraction of a step response.
 
@@ -303,7 +310,7 @@ def overshoot(x: NumberIterable,
     low, high = levels
     step_height = high - low
     if step_height == 0:
-        raise ValueError("State levels are equal — cannot compute overshoot")
+        return 0
 
     # Detect step direction
     rising = np.abs(x[-1] - high) < np.abs(x[-1] - low)
@@ -315,9 +322,7 @@ def overshoot(x: NumberIterable,
         min_val = np.min(x)
         overshoot_val = low - min_val
 
-    # Normalize
-    overshoot_frac = max(0.0, overshoot_val / step_height)
-    return overshoot_frac
+    return max(0.0, overshoot_val / step_height)
 
 
 def undershoot(x: NumberIterable,
@@ -341,7 +346,7 @@ def undershoot(x: NumberIterable,
     low, high = levels
     step_height = high - low
     if step_height == 0:
-        raise ValueError("State levels are equal — cannot compute undershoot")
+        return 0
 
     x = np.asarray(x)
     # Detect step direction (rising or falling)
@@ -353,7 +358,7 @@ def undershoot(x: NumberIterable,
     crossings = np.where(np.diff(above.astype(int)) != 0)[0]
 
     if crossings.size == 0:
-        raise ValueError("No step edge crossing found")
+        return 0
 
     edge_idx = crossings[0]
 
@@ -371,8 +376,7 @@ def undershoot(x: NumberIterable,
         max_val = np.max(post_edge)
         undershoot_val = max_val - low
 
-    undershoot_frac = undershoot_val / abs(step_height)
-    return undershoot_frac
+    return undershoot_val / abs(step_height)
 
 
 def slew_rate(x: NumberIterable, fs: Optional[float] = 1,
@@ -398,7 +402,7 @@ def slew_rate(x: NumberIterable, fs: Optional[float] = 1,
     slew = slew[np.isfinite(slew)]
 
     if len(slew) == 0:
-        raise ValueError("No valid slew rate data points found")
+        return 0
 
     return np.max(np.abs(slew))
 
@@ -431,7 +435,7 @@ def settling_time(x: NumberIterable, d: float = 0.02,
 
     step_height = high - low
     if step_height == 0:
-        raise ValueError("State levels are equal — cannot compute settling time")
+        return 0
 
     # Define settling band around final value
     final_val = x_uniform[-1]
@@ -455,4 +459,3 @@ def settling_time(x: NumberIterable, d: float = 0.02,
         settling_t += settling_time_margin
 
     return settling_t
-

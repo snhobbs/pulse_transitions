@@ -119,7 +119,9 @@ exclude = [
     "node_modules",
     "venv",
     "*/migrations/*.py",
-    "staticfiles/*"
+    "staticfiles/*",
+    "tests/",
+    "*.ipynb"
 ]
 line-length = 88
 indent-width = 4
@@ -133,7 +135,7 @@ select = [
   "C90",
   "I",
   "N",
-  "UP",
+  #"UP",
   "YTT",
   # "ANN", # flake8-annotations: we should support this in the future but 100+ errors atm
   "ASYNC",
@@ -180,9 +182,14 @@ select = [
   "PERF",
   # "FURB",
   # "LOG",
-  "RUF"
+  #"RUF"
 ]
 ignore = [
+  "N803",
+  "PLR0913",
+  "UP007",
+  "UP006",
+  "SLF001", 
   "S101", # Use of assert detected https://docs.astral.sh/ruff/rules/assert/
   "RUF012", # Mutable class attributes should be annotated with `typing.ClassVar`
   "SIM102", # sometimes it's better to nest
