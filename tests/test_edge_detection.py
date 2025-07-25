@@ -3,7 +3,7 @@ import unittest
 from scipy.signal import find_peaks
 from scipy.signal import lti, step, lsim
 import numpy as np
-from pulse_transitions.transient_response import detect_edges, detect_thresholds
+from pulse_transitions.transient_response import detect_edges, detect_thresholds, slew_rate
 from pulse_transitions.impl import _interpolate_crossing, _find_peaks_and_types
 from pulse_transitions.common import CrossingDetectionSettings, Edge, EdgeSign
 
@@ -208,6 +208,29 @@ class TestSecondOrderSystem(unittest.TestCase):
         un = undershoot(self.y)
         self.assertGreater(un, 0.4)
         self.assertLess(un, 0.6)  # should but not too much
+
+
+class TestSlewRateSimple(unittest.TestCase):
+    def test_zero_slew_rate_constant_signal(self):
+        x = np.full(100, 5.0)
+        sr = slew_rate(x)
+        self.assertEqual(sr, 0)
+
+    def test_positive_slew_rate_linear_rise(self):
+        x = np.linspace(0, 1000, 100)
+        sr = slew_rate(x)
+        self.assertAlmostEqual(sr, 10, delta=1)
+
+    def test_error_on_empty_input(self):
+        with self.assertRaises(ValueError):
+            slew_rate(np.array([]))
+
+    def test_nonzero_slew_rate_sine_wave(self):
+        t = np.linspace(0, 1, 1000)
+        x = np.sin(2 * np.pi * 5 * t)
+        sr = slew_rate(x)
+        self.assertGreater(sr, 0)
+
 
 class TestInterpolateCrossing(unittest.TestCase):
     def setUp(self):

@@ -53,22 +53,16 @@ class Edge(BaseModel):
         return self
 
     @property
-    def dx(self):
-        return abs(self.end - self.start)
+    def dx(self) -> float:
+        return self.end - self.start
 
     @property
-    def bound_low(self):
-        return [min([self.end, self.start]), min(self.thresholds)]
+    def bound_low(self) -> Tuple[float, float]:
+        return (min([self.end, self.start]), min(self.thresholds))
 
     @property
-    def bound_high(self):
-        return [max([self.end, self.start]), max(self.thresholds)]
-
-def closest_index(arr: np.ndarray, value: float) -> int:
-    '''
-    Return the index of the point closest to the given value
-    '''
-    return np.abs(arr - value).argmin()
+    def bound_high(self) -> Tuple[float, float]:
+        return (max([self.end, self.start]), max(self.thresholds))
 
 class PairedEdge(BaseModel):
     rise: Edge

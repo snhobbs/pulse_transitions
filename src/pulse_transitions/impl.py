@@ -6,11 +6,17 @@ from scipy.ndimage import gaussian_filter1d
 from scipy.interpolate import interp1d
 import scipy.signal
 
-from .common import CrossingDetectionSettings, GroupStrategy, Peak, closest_index, Edge, EdgeSign
+from .common import CrossingDetectionSettings, GroupStrategy, Peak, Edge, EdgeSign
 
 
 NumberIterable = Union[np.ndarray, Iterable[Union[int, float]]]
 log = logging.getLogger("pulse_transitions")
+
+def closest_index(arr: np.ndarray, value: float) -> int:
+    '''
+    Return the index of the point closest to the given value
+    '''
+    return np.abs(arr - value).argmin()
 
 def normalize(y: NumberIterable) -> np.ndarray:
     '''
@@ -394,6 +400,9 @@ def detect_signal_levels_with_derivative(_, y: NumberIterable, *, smooth_sigma: 
 def _get_xtime_from_t_fs(x: NumberIterable,
                          fs: Optional[float]=1,
                          t: Optional[NumberIterable]=None):
+    if(len(x) == 0):
+        raise ValueError("x cannot have a length of 0")
+
     x = np.asarray(x)
     # Time vector handling
     if t is not None:

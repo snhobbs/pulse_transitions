@@ -245,7 +245,7 @@ def falltime(x: NumberIterable, fs: Optional[float]=1,
 def midcross(x, fs: Optional[float] = 1,
              t: Optional[NumberIterable]=None,
              levels: Optional[Tuple[float,float]]=None,
-             **kwargs):
+             **kwargs) -> float:
     """
     Find mid-level crossing time of a bilevel signal.
 
@@ -373,3 +373,31 @@ def undershoot(x: NumberIterable,
 
     undershoot_frac = undershoot_val / abs(step_height)
     return undershoot_frac
+
+
+def slew_rate(x: NumberIterable, fs: Optional[float] = 1,
+             t: Optional[NumberIterable]=None,
+             **kwargs):
+    """
+    Calculate the slew rate of a signal y with respect to x.
+
+    Args:
+        x (array-like): Signal data.
+        fs (float): Sampling rate.
+        t (array-like, optional): Time array.
+
+    Returns:
+        float: Slew rate (units of y per unit of x)
+    """
+    x_uniform, t_uniform = impl._get_xtime_from_t_fs(x=x, fs=fs, t=t)
+
+    # Calculate the discrete derivative dy/dx
+    slew = np.gradient(x_uniform, t_uniform)
+
+    # Remove any NaN or infinite values due to zero dx
+    slew = slew[np.isfinite(slew)]
+
+    if len(slew) == 0:
+        raise ValueError("No valid slew rate data points found")
+
+    return np.max(np.abs(slew))
