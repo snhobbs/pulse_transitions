@@ -1,13 +1,39 @@
 import logging
 import unittest
 from scipy.signal import find_peaks
-from scipy.signal import lti, step
+from scipy.signal import lti, step, lsim
 import numpy as np
 from pulse_transitions.transient_response import detect_edges, detect_thresholds
 from pulse_transitions.impl import _interpolate_crossing, _find_peaks_and_types
 from pulse_transitions.common import CrossingDetectionSettings, Edge, EdgeSign
 
+import numpy as np
+from pulse_transitions import (
+    statelevels, risetime, falltime,
+    midcross, overshoot, undershoot
+)
+
+
 log = logging.getLogger("testing")
+
+
+def simulate_second_order_step(
+    t: np.ndarray,
+    zeta: float = 0.2,
+    omega_n: float = 25.0,
+) -> np.ndarray:
+    """Simulate underdamped second-order step response using scipy.signal."""
+    # System: H(s) = omega_n^2 / (s^2 + 2*zeta*omega_n*s + omega_n^2)
+    num = [omega_n**2]
+    den = [1, 2 * zeta * omega_n, omega_n**2]
+    system = lti(num, den)
+
+    # Step input (u(t))
+    u = np.ones_like(t)
+
+    # Simulate response
+    tout, y, _ = lsim(system, U=u, T=t)
+    return y
 
 @unittest.skip("No fitering in the impl")
 class TestFindPeaksAndTypes(unittest.TestCase):
@@ -95,72 +121,93 @@ class TestFindPeaksAndTypes(unittest.TestCase):
         self.assertEqual(peaks[0][1], 'rise')
 
 
-class TestDetectEdges(unittest.TestCase):
+class TestWaveformMetrics(unittest.TestCase):
+
     def setUp(self):
-        self.config = CrossingDetectionSettings(window=0)
+        self.t = np.linspace(0, 1, 1000)
+        self.rising = np.where(self.t >= 0.5, 1.0, 0.0)
+        self.falling = np.where(self.t >= 0.5, 0.0, 1.0)
 
-    def test_detect_single_rising_edge(self):
-        x = np.linspace(0, 1, 100)
-        y = np.zeros_like(x)
-        y[40:60] = np.linspace(0.0, 1.0, 20)
-        y[60:] = 1.0
+    def test_statelevels_rising(self):
+        levels, bins, hist = statelevels(self.rising)
+        low, high = levels
+        self.assertLess(low, high)
+        self.assertAlmostEqual(0, low, 2)
+        self.assertAlmostEqual(1, high, 2)
+        self.assertEqual(len(bins), len(hist))
 
-        edges = detect_edges(x, y, thresholds=(0.1, 0.9), settings=self.config)
-        self.assertEqual(len(edges), 1)
-        edge = edges[0]
-        self.assertEqual(edge.type, 'rise')
-        self.assertTrue(0.1 <= edge.ymin < 0.5)
-        self.assertTrue(0.5 < edge.ymax <= 1.0)
+    def test_risetime(self):
+        edge = risetime(x=self.rising, fs=len(self.t), t=self.t)
+        self.assertIsNotNone(edge)
+        self.assertEqual(edge.sign, EdgeSign.rising)
+        self.assertTrue(0.4 < edge.start < edge.end < 0.6)
 
-    def test_detect_multiple_edges(self):
-        x = np.linspace(0, np.pi*20, 100000)
-        y = np.sin(x)
+    def test_falltime(self):
+        edge = falltime(x=self.falling, fs=len(self.t), t=self.t)
+        self.assertIsNotNone(edge)
+        self.assertEqual(edge.sign, EdgeSign.falling)
+        self.assertTrue(0.4 < edge.start < edge.end < 0.6)
 
-        edges = detect_edges(x, y, thresholds=(0.2, 0.8), settings=self.config)
-        self.assertEqual(len(edges), 4)
-        rise_count = sum(1 for e in edges if e.type == 'rise')
-        fall_count = sum(1 for e in edges if e.type == 'fall')
+    def test_midcross_rising(self):
+        mid = midcross(x=self.rising, fs=len(self.t), t=self.t)
+        self.assertTrue(0.4 < mid < 0.6)
 
-        self.assertEqual(rise_count, 2)
-        self.assertEqual(fall_count, 2)
+    def test_midcross_falling(self):
+        mid = midcross(x=self.falling, fs=len(self.t), t=self.t)
+        self.assertTrue(0.4 < mid < 0.6)
 
-    def test_no_edges_detected(self):
-        x = np.linspace(0, 1, 100)
-        y = np.full_like(x, 0.5)
-        edges = detect_edges(x, y, thresholds=(0.1, 0.9), settings=self.config)
-        self.assertEqual(len(edges), 0)
+    def test_overshoot_clean_step(self):
+        self.assertAlmostEqual(overshoot(self.rising), 0.0, places=6)
 
-    def test_bounds_limit_detection(self):
-        y = np.concatenate([
-            np.linspace(0.0, 1.0, 50),
-            np.linspace(1.0, 0.0, 50),
-            np.linspace(0.0, 1.0, 50),
-            np.linspace(1.0, 0.0, 50)
-        ])
-        x = np.linspace(0, 2, len(y))
+    def test_undershoot_clean_step(self):
+        self.assertAlmostEqual(undershoot(self.rising), 0.0, places=2)
 
-        edges = detect_edges(x, y, thresholds=(0.2, 0.8), bounds=(0.0, 2.0), settings=self.config)
-        self.assertEqual(len(edges), 2)  # Only the first rise and fall should be in bounds
+    def test_overshoot_detected(self):
+        t = np.linspace(0, 1, 1000)
+        rising_overshoot = np.where(t >= 0.5, 1.0, 0.0) + np.where((t >= 0.5) & (t <= 0.6), 0.2, 0.0)
+        rising_overshoot_undershoot = rising_overshoot + np.where((t >= 0.55) & (t <= 0.65), -0.2, 0)
+        un = overshoot(rising_overshoot_undershoot)
+        self.assertAlmostEqual(un, 0.2, 2)
+
+    def test_undershoot_detected(self):
+        t = np.linspace(0, 1, 1000)
+        rising_overshoot = np.where(t >= 0.5, 1.0, 0.0) + np.where((t >= 0.5) & (t <= 0.6), 0.2, 0.0)
+        rising_overshoot_undershoot = rising_overshoot + np.where((t >= 0.55) & (t <= 0.65), -0.2, 0)
+        un = undershoot(rising_overshoot_undershoot)
+        self.assertAlmostEqual(un, 0.2, 2)
 
 
+class TestSecondOrderSystem(unittest.TestCase):
 
-'''
-def _interpolate_crossing(x: np.ndarray, y: np.ndarray, idx: int, thresholds: Tuple[float, float], sign: int, *, window: int = None):
+    def setUp(self):
+        self.t = np.linspace(-1, 1.0, 2000)
+        self.y = [0]*len(np.where(self.t < 0)[0]) + list(simulate_second_order_step(self.t[np.where(self.t >= 0)[0]], zeta=0.2, omega_n=25.0))
 
-    Interpolate precise crossing times for low and high thresholds around a peak with optional hysteresis window.
+    def test_statelevels(self):
+        levels, bins, hist = statelevels(self.y)
+        low, high = levels
+        self.assertLess(low, high)
+        self.assertAlmostEqual(low, 0.0, delta=0.1)
+        self.assertAlmostEqual(high, 1.0, delta=0.1)
 
-    Args:
-        x (np.ndarray): Time array.
-        y (np.ndarray): Signal array.
-        idx (int): Peak index in the arrays.
-        thresholds (float,float): Threshold crossing values.
-        sign (int): +1 for rising pulse, -1 for falling pulse.
-        window (int, optional): Number of samples before/after peak to limit search.
+    def test_risetime(self):
+        edge = risetime(x=self.y, fs=len(self.t), t=self.t)
+        self.assertEqual(edge.sign, EdgeSign.rising)
+        self.assertTrue(0.01 < edge.start < edge.end < 0.3)
 
-    Returns:
-        tuple: (start_time, end_time) for lo_val and hi_val crossings, in time order.
-'''
+    def test_midcross(self):
+        mc = midcross(x=self.y, fs=len(self.t), t=self.t)
+        self.assertTrue(0.01 < mc < 0.3)
 
+    def test_overshoot(self):
+        ov = overshoot(self.y)
+        self.assertGreater(ov, 0.5)
+        self.assertLess(ov, 0.6)  # should overshoot but not too much
+
+    def test_undershoot(self):
+        un = undershoot(self.y)
+        self.assertGreater(un, 0.4)
+        self.assertLess(un, 0.6)  # should but not too much
 
 class TestInterpolateCrossing(unittest.TestCase):
     def setUp(self):

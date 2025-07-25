@@ -1,6 +1,6 @@
 '''
 Transient response edge detection module.
-Provides functions to detect rising and falling edges in signals using derivative-based peak detection and interpolation.
+
 '''
 from dataclasses import dataclass
 from typing import Iterable, Union, Optional, Tuple
@@ -8,14 +8,8 @@ import logging
 
 import numpy as np
 from scipy.ndimage import gaussian_filter1d
-from scipy.interpolate import interp1d
-from .common import PairedEdge, CrossingDetectionSettings, Edge, Peak, EdgeSign
+from . common import PairedEdge, CrossingDetectionSettings, Edge, Peak, EdgeSign
 from . import impl
-#from .impl import normalize, denormalize, closest_index, _interpolate_crossing, \
-#                  _find_peaks_and_types, detect_signal_levels_with_derivative, detect_signal_levels_with_endpoints, \
-#                  detect_signal_levels_with_endpoints, filter_overlapping_edges, \
-#                  detect_signal_levels_with_histogram, detect_signal_levels_with_derivative, detect_signal_levels_with_endpoints
-
 
 NumberIterable = Union[np.ndarray, Iterable[Union[int, float]]]
 log = logging.getLogger("pulse_transitions")
@@ -23,10 +17,17 @@ log = logging.getLogger("pulse_transitions")
 
 def detect_signal_levels(x: NumberIterable, y: NumberIterable, method="histogram", **kwargs):
     """
-    Detect the levels of a 2-mode system using one of several methods.
+    Estimate low and high signal levels in a two-mode system using a selected method.
+
+    Args:
+        x (array-like): Time or index vector.
+        y (array-like): Signal data.
+        method (str): Detection method ('histogram', 'derivative', 'endpoint').
+
     Returns:
-        (low_level, high_level)
+        tuple: (low_level, high_level)
     """
+
     methods = {
         "histogram": impl.detect_signal_levels_with_histogram,
         "derivative": impl.detect_signal_levels_with_derivative,
@@ -40,107 +41,73 @@ def detect_signal_levels(x: NumberIterable, y: NumberIterable, method="histogram
     return low_level, high_level
 
 
-def calculate_thresholds(x: NumberIterable, y: NumberIterable,
-                         levels: Tuple[float, float],
-                         thresholds: Tuple[float,float]=(0.1, 0.9)):
-    x = np.asarray(x, dtype=float)
-    y = np.asarray(y, dtype=float)
-
-    low, high = levels
-    diff = high-low
-    assert diff >= 0
-
-    return list(sorted((
-        low + min(thresholds) * diff,
-        low + max(thresholds) * diff
-    )))
-
 def detect_thresholds(x: NumberIterable, y: NumberIterable, method='histogram',
-                      thresholds: Tuple[float,float]=(0.1, 0.9),
-                      **kwargs):
-    '''
-    Estimate low and high reference levels using flat portions of the signal where the derivative is minimal.
+                      thresholds: Tuple[float,float]=(0.1, 0.9), **kwargs):
+    """
+    Estimate threshold levels based on flat signal regions.
 
     Args:
-        x (array-like): Time or sample index array.
-        y (array-like): Signal amplitude array.
-        low_fraction (float): Fractional level for the low reference (e.g., 0.1).
-        high_fraction (float): Fractional level for the high reference (e.g., 0.9).
+        x (array-like): Time or index array.
+        y (array-like): Signal data.
+        method (str): Method for level detection ('histogram', etc.).
+        thresholds (tuple): Normalized threshold fractions.
 
     Returns:
-        tuple: (low_level, high_level)
-    '''
+        list: Absolute threshold values.
+    """
+
     x = np.asarray(x, dtype=float)
     y = np.asarray(y, dtype=float)
 
     low, high, *_ = detect_signal_levels(x, y, method=method, **kwargs)
 
-    return calculate_thresholds(x, y, [low, high], low_fraction, high_fraction)
+    return impl._calculate_thresholds(x, y, [low, high], low_fraction, high_fraction)
 
 
 def detect_first_edge(x: NumberIterable, y: NumberIterable,
-                      thresholds: Tuple[float,float]=(0.1, 0.9),
                       sign: Union[EdgeSign, int],
+                      thresholds: Tuple[float,float]=(0.1, 0.9),
                       *, settings: Optional[CrossingDetectionSettings] = None) -> Optional[Edge]:
-    '''
-    Detect the first edge in a data series.
-    return Edge
-    '''
+    """
+    Detect the first threshold crossing edge of specified polarity.
+
+    Args:
+        x (array-like): Time or index array.
+        y (array-like): Signal data.
+        thresholds (tuple): Threshold values.
+        sign (EdgeSign or int): Desired edge polarity.
+        settings (CrossingDetectionSettings): Optional crossing settings.
+
+    Returns:
+        Edge or None: Detected edge or None if not found.
+    """
+
     assert len(x)
     assert len(y)
-    xbound = x
-    ybound = y
-    if settings is None:
-        settings = CrossingDetectionSettings()
-
-    if settings.window > 0:
-        # FIXME instead of just a window use the multiple edges to find an appropriate separation between points
-        mask = (x>(peak.start-settings.window/2)) & (x<(peak.end+settings.window/2))
-        assert peak.end > peak.start
-        xbound = xbound[mask]
-        ybound = ybound[mask]
-    # Interpolate the crossing point to find a more accurate crossing
-
-    if min(y) > min(thresholds) or max(y) < max(thresholds):
-        return None
-
-    x1, x2 = impl._interpolate_crossing(
-        x=xbound, y=ybound,
-        thresholds=thresholds,
-        sign=EdgeSign(sign)
-    )
-
-    # Confirm that the segment around the peak actually crosses both levels
-    idxs = [impl.closest_index(xbound, x1), impl.closest_index(xbound, x2)]
-
-    # Handle discontinuous edge
-    if idxs[0] == idxs[1]:
-        idxs = [max([0, idxs[0]-1]), min([len(xbound), idxs[0]+1])]
-
-    # Make an edge object
-    return Edge(
-            start=x1, end=x2, sign=sign,
-            thresholds=thresholds,
-            ymin=min(ybound[idxs]), ymax=max(ybound[idxs]))
+    return impl._detect_first_edge(x=x, y=y,
+                      sign=sign,
+                      thresholds=thresholds,
+                      settings=settings)
 
 
 def detect_edges(x: NumberIterable, y: NumberIterable,
                  thresholds: Tuple[float,float]=(0.1, 0.9),
                  *, bounds=None,
                  settings: Optional[CrossingDetectionSettings] = None) -> list[Edge]:
-    '''
-    Detects rising and falling edges in a signal using derivative peak widths and interpolated threshold crossings.
+    """
+    Detect rising and falling edges using derivative peaks and interpolation.
 
     Args:
-        x (array-like): Time or sample index array.
-        y (array-like): Signal amplitude array.
-        thresholds (tuple): Low and high thresholds for signal.
-        bounds (tuple, optional): Time bounds (min, max) to restrict analysis.
-        hysteresis_window (int, optional): Limit threshold search around peaks to N samples.
+        x (array-like): Time or index array.
+        y (array-like): Signal data.
+        thresholds (tuple): Threshold values.
+        bounds (tuple, optional): Time bounds to restrict analysis.
+        settings (CrossingDetectionSettings): Detection configuration.
 
     Returns:
-        List[Edge]: Detected edges with precise timings.
-    '''
+        list[Edge]: List of detected edges.
+    """
+
      # FIXME this should split the signals into each par of signal
 
     x = np.asarray(x, dtype=float)
@@ -165,38 +132,34 @@ def detect_edges(x: NumberIterable, y: NumberIterable,
             continue
     return edges
 
-
-def calculate_overshoot(y: NumberIterable, levels: Tuple[float, float]):
-    '''
-    Take the data and an Edge object, returns the overshoot / undershoot of the edge.
-    thresholds (tuple): Low and high thresholds for signal.
-    returns undershoot, overshoot as a fraction
-    '''
-    low, high = levels
-    height = abs(high-low)
-    return (min(y)-low)/height, (max(y)-high)/height
-
 def detect_overshoot(x, y: NumberIterable, method="histogram"):
-    '''
-    Take the data and an Edge object, returns the overshoot / undershoot of the edge.
-    thresholds (tuple): Low and high thresholds for signal.
-    returns undershoot, overshoot as a fraction
-    '''
+    """
+    Estimate signal levels, then compute overshoot and undershoot.
+
+    Args:
+        x (array-like): Time or index array.
+        y (array-like): Signal data.
+        method (str): Level detection method.
+
+    Returns:
+        tuple: (undershoot_fraction, overshoot_fraction)
+    """
+
     levels = detect_signal_levels(x, y, method=method)
-    return calculate_overshoot(y, levels=levels)
+    return impl._calculate_overshoot(y, levels=levels)
 
 def pair_edges(edges: list[Edge], *, max_gap: float = None) -> list[PairedEdge]:
     """
-    Pairs rising and falling edges in order of occurrence. Assumes positive pulses.
-    Invert y if using negative pulses.
+    Pair rising and falling edges into pulses based on order and timing.
 
     Args:
-        edges (list[Edge]): List of rising and falling edges.
-        max_gap (float, optional): Maximum allowed time between rising and falling edges.
+        edges (list[Edge]): List of edges to pair.
+        max_gap (float, optional): Maximum allowed gap between rising and falling edge.
 
     Returns:
-        list[PairedEdge]: List of paired edges.
+        list[PairedEdge]: List of valid rising/falling edge pairs.
     """
+
     edges = sorted(edges, key=lambda e: e.start)
     pairs = []
     used_indices = set()
@@ -219,45 +182,6 @@ def pair_edges(edges: list[Edge], *, max_gap: float = None) -> list[PairedEdge]:
                 log.error("Edge is invalid")
     return pairs
 
-
-def _get_xtime_from_t_fs(x: NumberIterable,
-                         fs: Optional[float]=1,
-                         t: Optional[NumberIterable]=None):
-    x = np.asarray(x)
-    # Time vector handling
-    if t is not None:
-        t = np.asarray(t)
-        if t.shape != x.shape:
-            raise ValueError("t must be the same shape as x")
-        # Use a spline to resample signal uniformly
-        f = interp1d(t, x, kind='cubic', fill_value='extrapolate')
-        t_uniform = np.linspace(t[0], t[-1], len(x))
-        x_uniform = f(t_uniform)
-    else:
-        # Uniform time base
-        t_uniform = np.arange(len(x)) / fs
-        x_uniform = x
-    return x_uniform, t_uniform
-
-
-def _detect_edge_wrapper(sign: EdgeSign, x: NumberIterable, fs: Optional[float]=1,
-             t: Optional[NumberIterable]=None,
-             levels: Optional[Tuple[float,float]]=None,
-             thresholds: Tuple[float,float]=(0.1, 0.9),
-             settings: Optional[CrossingDetectionSettings]=None, **kwargs) -> Optional[Edge]:
-    x_uniform, t_uniform = _get_xtime_from_t_fs(x=x, fs=fs, t=t)
-    if not levels:
-        levels, *_ = statelevels(A=x_uniform, **kwargs)
-
-    level_diff = max(levels) - min(levels)
-    edge_thresholds = (
-        min(levels) + level_diff*min(thresholds),
-        min(levels) + level_diff*max(thresholds))
-
-    return detect_first_edge(x=t_uniform, y=x_uniform,
-                             thresholds=edge_thresholds,
-                             sign=sign, settings=settings)
-
 #=========================
 # Matlab naming starts
 #=========================
@@ -265,9 +189,18 @@ def _detect_edge_wrapper(sign: EdgeSign, x: NumberIterable, fs: Optional[float]=
 
 def statelevels(A: NumberIterable, nbins: int = 100, method="mode",
                 bounds: Tuple[float, float] = None, **kwargs):
-    '''
-    Estimate state-level for bilevel waveform A using histogram method.
-    '''
+    """
+    Estimate low/high levels for a bilevel waveform using histogram analysis.
+
+    Args:
+        A (array-like): Signal data.
+        nbins (int): Number of histogram bins.
+        method (str): Level extraction method.
+        bounds (tuple, optional): Range for histogram.
+
+    Returns:
+        tuple: ((low_level, high_level), bin_centers, histogram)
+    """
     y = A
     low_level, high_level, bin_centers, smoothed_hist, _ = impl.detect_signal_levels_with_histogram(None, y, nbins=nbins, smooth_sigma=0)
     return (low_level, high_level), bin_centers, smoothed_hist
@@ -278,7 +211,13 @@ def risetime(x: NumberIterable, fs: Optional[float]=1,
              levels: Optional[Tuple[float,float]]=None,
              thresholds: Tuple[float,float]=(0.1, 0.9),
              settings: Optional[CrossingDetectionSettings]=None, **kwargs) -> Optional[Edge]:
-    return _detect_edge_wrapper(sign=EdgeSign.rising,
+    """
+    Detect rising edge timing with interpolation.
+
+    Returns:
+        Edge or None
+    """
+    return impl._detect_edge_wrapper(sign=EdgeSign.rising,
                         x=x, fs=fs,
                         t=t,
                         levels=levels,
@@ -290,32 +229,37 @@ def falltime(x: NumberIterable, fs: Optional[float]=1,
              levels: Optional[Tuple[float,float]]=None,
              thresholds: Tuple[float,float]=(0.1, 0.9),
              settings: Optional[CrossingDetectionSettings]=None, **kwargs) -> Optional[Edge]:
-    return _detect_edge_wrapper(sign=EdgeSign.falling,
+    """
+    Detect falling edge timing with interpolation.
+
+    Returns:
+        Edge or None
+    """
+    return impl._detect_edge_wrapper(sign=EdgeSign.falling,
                         x=x, fs=fs,
                         t=t,
                         levels=levels,
                         thresholds=thresholds,
                         settings=settings, **kwargs)
 
-def midcross(x, fs:Optional[float] =1,
+def midcross(x, fs: Optional[float] = 1,
              t: Optional[NumberIterable]=None,
              levels: Optional[Tuple[float,float]]=None,
              **kwargs):
-    '''
-    Mid-reference level crossing for bilevel waveform.
-    Calculate statelevels and return the average.
+    """
+    Find mid-level crossing time of a bilevel signal.
 
     Args:
-        x (array-like): Bilevel signal waveform.
-        Fs (float): Sampling frequency (ignored if `t` is provided).
-        t (array-like, optional): Time vector (same length as x).
-        levels (tuple, optional): Reference levels used, otherwise they are calculated
-        **kwargs: Passed to `statele()` for level detection.
+        x (array-like): Signal data.
+        fs (float): Sampling rate.
+        t (array-like, optional): Time array.
+        levels (tuple, optional): Reference levels.
 
     Returns:
-        float: Time or index of mid-reference crossing.
-    '''
-    x_uniform, t_uniform = _get_xtime_from_t_fs(x=x, fs=fs, t=t)
+        float: Time of mid-reference crossing.
+    """
+
+    x_uniform, t_uniform = impl._get_xtime_from_t_fs(x=x, fs=fs, t=t)
     if not levels:
         levels, *_ = statelevels(A=x_uniform, **kwargs)
 
@@ -342,6 +286,17 @@ def midcross(x, fs:Optional[float] =1,
 def overshoot(x: NumberIterable,
               levels: Optional[Tuple[float, float]]=None,
               **kwargs):
+    """
+    Compute normalized overshoot fraction of a step response.
+
+    Args:
+        x (array-like): Signal data.
+        levels (tuple, optional): Low/high state levels.
+
+    Returns:
+        float: Overshoot fraction.
+    """
+
     if not levels:
         levels, *_ = statelevels(A=x, **kwargs)
 
@@ -368,19 +323,16 @@ def overshoot(x: NumberIterable,
 def undershoot(x: NumberIterable,
                levels: Optional[Tuple[float, float]]=None,
                **kwargs) -> float:
-    '''
-    Compute normalized undershoot immediately after the step edge.
+    """
+    Compute normalized undershoot fraction of a step response.
 
     Args:
-        x (array-like): Step response signal.
-        levels (tuple, optional): (low_level, high_level). If None, estimated via `statele()`.
-        window (int): Number of samples after edge to consider for undershoot.
-        **kwargs: Passed to `statele()` if levels is None.
+        x (array-like): Signal data.
+        levels (tuple, optional): Low/high state levels.
 
     Returns:
-        float: Undershoot fraction of step height (0 if no undershoot).
-    '''
-    x = np.asarray(x)
+        float: Undershoot fraction.
+    """
 
     # Estimate state levels if not provided
     if levels is None:
@@ -391,6 +343,7 @@ def undershoot(x: NumberIterable,
     if step_height == 0:
         raise ValueError("State levels are equal — cannot compute undershoot")
 
+    x = np.asarray(x)
     # Detect step direction (rising or falling)
     rising = np.abs(x[-1] - high) < np.abs(x[-1] - low)
 
@@ -412,11 +365,11 @@ def undershoot(x: NumberIterable,
     if rising:
         # Undershoot is how far the minimum after the edge falls below low level
         min_val = np.min(post_edge)
-        undershoot_val = max(0, low - min_val)
+        undershoot_val = high - min_val
     else:
         # Undershoot is how far the maximum after the edge rises above high level
         max_val = np.max(post_edge)
-        undershoot_val = max(0, max_val - high)
+        undershoot_val = max_val - low
 
     undershoot_frac = undershoot_val / abs(step_height)
     return undershoot_frac
