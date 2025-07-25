@@ -14,6 +14,7 @@ from .common import CrossingDetectionSettings
 from .common import Edge
 from .common import EdgeSign
 from .common import GroupStrategy
+from .common import PairedEdge
 from .common import Peak
 
 NumberIterable = Union[np.ndarray, Iterable[Union[int, float]]]
@@ -475,7 +476,7 @@ def _calculate_thresholds(x: NumberIterable, y: NumberIterable,
         low + max(thresholds) * diff
     ))
 
-def _calculate_overshoot(y: NumberIterable, levels: Tuple[float, float]):
+def _calculate_overshoot(y: NumberIterable, levels: Tuple[float, float]) -> float:
     """
     Calculate overshoot and undershoot as fractions of the step height.
 
@@ -484,12 +485,63 @@ def _calculate_overshoot(y: NumberIterable, levels: Tuple[float, float]):
         levels (tuple): (low_level, high_level)
 
     Returns:
-        tuple: (undershoot_fraction, overshoot_fraction)
+        float: overshoot_fraction
     """
 
     low, high = levels
-    height = abs(high-low)
-    return (min(y)-low)/height, (max(y)-high)/height
+    step_height = high - low
+    if step_height == 0:
+        return 0
+
+    # Detect step direction
+    rising = np.abs(y[-1] - high) < np.abs(y[-1] - low)
+
+    if rising:
+        max_val = np.max(y)
+        overshoot_val = max_val - high
+    else:
+        min_val = np.min(y)
+        overshoot_val = low - min_val
+
+    return max(0.0, overshoot_val / step_height)
+
+
+def _calculate_undershoot(y: NumberIterable, levels: Tuple[float, float]) -> float:
+    low, high = levels
+    step_height = high - low
+    if step_height == 0:
+        return 0
+
+    y = np.asarray(y)
+    # Detect step direction (rising or falling)
+    rising = np.abs(y[-1] - high) < np.abs(y[-1] - low)
+
+    # Find step edge index by locating midpoint crossing
+    mid = 0.5 * (low + high)
+    above = y > mid
+    crossings = np.where(np.diff(above.astype(int)) != 0)[0]
+
+    if crossings.size == 0:
+        return 0
+
+    edge_idx = crossings[0]
+
+    # Define post-edge analysis window (make sure not to exceed signal length)
+    start_idx = edge_idx + 1
+    end_idx = len(y)
+    post_edge = y[start_idx:end_idx]
+
+    if rising:
+        # Undershoot is how far the minimum after the edge falls below low level
+        min_val = np.min(post_edge)
+        undershoot_val = high - min_val
+    else:
+        # Undershoot is how far the maximum after the edge rises above high level
+        max_val = np.max(post_edge)
+        undershoot_val = max_val - low
+
+    return undershoot_val / abs(step_height)
+
 
 def _detect_first_edge(x: NumberIterable, y: NumberIterable,
                       sign: Union[EdgeSign, int],
@@ -535,3 +587,103 @@ def _detect_first_edge(x: NumberIterable, y: NumberIterable,
             start=x1, end=x2, sign=EdgeSign(sign),
             thresholds=thresholds,
             ymin=min(ybound[idxs]), ymax=max(ybound[idxs]))
+
+
+def _calculate_settling_time(x, y, levels, settling_time_fraction=0.02, settling_time_margin=0):
+    low, high = levels
+
+    step_height = high - low
+    if step_height == 0:
+        return 0
+
+    # Define settling band around final value
+    final_val = y[-1]
+    tol = settling_time_fraction * abs(step_height)
+    lower_bound = final_val - tol
+    upper_bound = final_val + tol
+
+    # Find indices where signal is outside settling band
+    out_of_bounds = np.where((y < lower_bound) | (y > upper_bound))[0]
+
+    if len(out_of_bounds) == 0:
+        # Signal is always within settling band
+        return x[0]
+
+    # Last time index outside settling band
+    last_out_idx = out_of_bounds[-1]
+
+    settling_t = x[last_out_idx]
+
+    if settling_time_margin is not None:
+        settling_t += settling_time_margin
+
+    return settling_t
+
+
+def _calculate_slew_rate(x, y):
+
+    # Calculate the discrete derivative dy/dx
+    slew = np.gradient(y, x)
+
+    # Remove any NaN or infinite values due to zero dx
+    slew = slew[np.isfinite(slew)]
+
+    if len(slew) == 0:
+        return 0
+
+    return np.max(np.abs(slew))
+
+
+def _calculate_midcross(x, y, levels):
+    # Midpoint level
+    mid = 0.5 * (levels[0] + levels[1])
+
+    # Find the first crossing
+    above = y > mid
+    crossings = np.where(np.diff(above.astype(int)) != 0)[0]
+
+    if crossings.size == 0:
+        return 0
+
+    idx = crossings[0]
+    # Linear interpolation for more precise crossing time
+    y0, y1 = y[idx], y[idx + 1]
+    x0, x1 = x[idx], x[idx + 1]
+
+    frac = (mid - y0) / (y1 - y0)
+    return x0 + frac * (x1 - x0)  # tcross
+
+
+def pair_edges(edges: list[Edge], *, max_gap: float = None) -> list[PairedEdge]:
+    """
+    Pair rising and falling edges into pulses based on order and timing.
+
+    Args:
+        edges (list[Edge]): List of edges to pair.
+        max_gap (float, optional): Maximum allowed gap between rising and falling edge.
+
+    Returns:
+        list[PairedEdge]: List of valid rising/falling edge pairs.
+    """
+
+    edges = sorted(edges, key=lambda e: e.start)
+    pairs = []
+    used_indices = set()
+
+    for i, first_edge in enumerate(edges):
+        if first_edge.sign != EdgeSign.rising or i in used_indices:
+            continue
+        for j in range(i + 1, len(edges)):
+            if j in used_indices:
+                continue
+            second_edge = edges[j]
+            if second_edge.sign == EdgeSign.falling:
+                if max_gap is not None and (second_edge.start - first_edge.end) > max_gap:
+                    break
+                pair = PairedEdge(rise=first_edge, fall=second_edge)
+                if pair.is_valid:
+                    pairs.append(pair)
+                    used_indices.update({i, j})
+                    break
+                log.error("Edge is invalid")
+    return pairs
