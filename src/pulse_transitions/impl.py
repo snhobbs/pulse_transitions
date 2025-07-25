@@ -444,7 +444,7 @@ def _detect_edge_wrapper(sign: EdgeSign, x: NumberIterable, fs: Optional[float]=
 
     return _detect_first_edge(x=t_uniform, y=x_uniform,
                              thresholds=edge_thresholds,
-                             sign=sign, settings=settings)
+                             sign=sign)
 
 
 def _calculate_thresholds(x: NumberIterable, y: NumberIterable,
