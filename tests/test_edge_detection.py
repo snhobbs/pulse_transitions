@@ -3,7 +3,7 @@ import unittest
 from scipy.signal import find_peaks
 from scipy.signal import lti, step, lsim
 import numpy as np
-from pulse_transitions.transient_response import detect_edges, detect_thresholds, slew_rate
+from pulse_transitions.transient_response import detect_edges, detect_thresholds, slew_rate, settling_time
 from pulse_transitions.impl import _interpolate_crossing, _find_peaks_and_types
 from pulse_transitions.common import CrossingDetectionSettings, Edge, EdgeSign
 
@@ -231,6 +231,36 @@ class TestSlewRateSimple(unittest.TestCase):
         sr = slew_rate(x)
         self.assertGreater(sr, 0)
 
+
+class TestSettlingTime(unittest.TestCase):
+    def test_settling_time_simple_step(self):
+        # Signal: step from 0 to 1 at t=5, settles immediately after t=6
+        t = np.linspace(0, 10, 1000)
+        x = np.zeros_like(t)
+        t_rise = 5
+        t_overshoot_margin = 0.1
+        x[t >= t_rise] = 1.0
+        # Add a brief overshoot before settling
+        x[(t > t_rise) & (t < t_rise+t_overshoot_margin)] = 1.1
+        settling = settling_time(x, d=0.05, fs=100, t=t)
+        self.assertAlmostEqual(settling, 5.1, 2)
+        self.assertLessEqual(settling, 6.0)
+
+    def test_settling_time_no_settle(self):
+        # Signal oscillates outside bounds forever
+        t = np.linspace(0, 1, 100)
+        x = 1 + 0.1 * np.sin(50 * np.pi * t)
+        settling = settling_time(x, d=0.01, fs=100, t=t)
+        self.assertAlmostEqual(settling, max(t), 1)
+
+    def test_settling_time_with_margin(self):
+        # Simple step with settling margin
+        t = np.linspace(0, 10, 1000)
+        x = np.zeros_like(t)
+        x[t >= 3] = 1
+        settling = settling_time(x, d=0.05, fs=100, t=t, settling_time_margin=0.5)
+        self.assertGreaterEqual(settling, 3)
+        self.assertLessEqual(settling, 10.5)
 
 class TestInterpolateCrossing(unittest.TestCase):
     def setUp(self):

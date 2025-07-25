@@ -401,3 +401,58 @@ def slew_rate(x: NumberIterable, fs: Optional[float] = 1,
         raise ValueError("No valid slew rate data points found")
 
     return np.max(np.abs(slew))
+
+
+def settling_time(x: NumberIterable, d: float = 0.02,
+                 fs: Optional[float] = 1,
+                 t: Optional[NumberIterable] = None,
+                 levels: Optional[Tuple[float, float]] = None,
+                 settling_time_margin: Optional[float] = None,
+                 **kwargs):
+    """
+    Calculate the settling time of a step response signal.
+
+    Args:
+        x (array-like): Signal data.
+        d (float): Fractional tolerance band for settling (default 0.02 = 2%).
+        fs (float): Sampling rate.
+        t (array-like, optional): Time array.
+        levels (tuple, optional): Low/high reference levels.
+        settling_time_margin (float, optional): Additional time margin added after last deviation.
+
+    Returns:
+        float: Settling time in units of t (or samples if t is None).
+    """
+    x_uniform, t_uniform = impl._get_xtime_from_t_fs(x=x, fs=fs, t=t)
+
+    if levels is None:
+        levels, *_ = statelevels(A=x_uniform, **kwargs)
+    low, high = levels
+
+    step_height = high - low
+    if step_height == 0:
+        raise ValueError("State levels are equal — cannot compute settling time")
+
+    # Define settling band around final value
+    final_val = x_uniform[-1]
+    tol = d * abs(step_height)
+    lower_bound = final_val - tol
+    upper_bound = final_val + tol
+
+    # Find indices where signal is outside settling band
+    out_of_bounds = np.where((x_uniform < lower_bound) | (x_uniform > upper_bound))[0]
+
+    if len(out_of_bounds) == 0:
+        # Signal is always within settling band
+        return t_uniform[0]
+
+    # Last time index outside settling band
+    last_out_idx = out_of_bounds[-1]
+
+    settling_t = t_uniform[last_out_idx]
+
+    if settling_time_margin is not None:
+        settling_t += settling_time_margin
+
+    return settling_t
+
