@@ -1,18 +1,22 @@
 import logging
 import unittest
-from scipy.signal import find_peaks
-from scipy.signal import lti, step, lsim
-import numpy as np
-from pulse_transitions.transient_response import detect_edges, detect_thresholds, slew_rate, settling_time
-from pulse_transitions.impl import _interpolate_crossing, _find_peaks_and_types
-from pulse_transitions.common import CrossingDetectionSettings, Edge, EdgeSign
 
 import numpy as np
-from pulse_transitions import (
-    statelevels, risetime, falltime,
-    midcross, overshoot, undershoot
-)
+from scipy.signal import lsim
+from scipy.signal import lti
 
+from pulse_transitions import falltime
+from pulse_transitions import midcross
+from pulse_transitions import overshoot
+from pulse_transitions import risetime
+from pulse_transitions import statelevels
+from pulse_transitions import undershoot
+from pulse_transitions.common import CrossingDetectionSettings
+from pulse_transitions.common import EdgeSign
+from pulse_transitions.impl import _find_peaks_and_types
+from pulse_transitions.impl import _interpolate_crossing
+from pulse_transitions.transient_response import settling_time
+from pulse_transitions.transient_response import slew_rate
 
 log = logging.getLogger("testing")
 
@@ -49,7 +53,7 @@ class TestFindPeaksAndTypes(unittest.TestCase):
         peaks = _find_peaks_and_types(x, y, thresholds=[0.1, 0.9], settings=self.config)
 
         self.assertEqual(len(peaks), 1)
-        self.assertEqual(peaks[0][1], 'rise')
+        self.assertEqual(peaks[0][1], "rise")
 
     def test_single_falling_peak_crossing_thresholds(self):
         x = np.linspace(0, 1, 100)
@@ -60,7 +64,7 @@ class TestFindPeaksAndTypes(unittest.TestCase):
         peaks = _find_peaks_and_types(x, y, thresholds=[0.1, 0.9], settings=self.config)
 
         self.assertEqual(len(peaks), 1)
-        self.assertEqual(peaks[0][1], 'fall')
+        self.assertEqual(peaks[0][1], "fall")
 
     def test_rise_and_fall_peaks(self):
         x = np.linspace(0, 2, 200)
@@ -74,8 +78,8 @@ class TestFindPeaksAndTypes(unittest.TestCase):
         peaks = _find_peaks_and_types(x, y, thresholds=[0.2, 0.8], settings=self.config)
 
         self.assertEqual(len(peaks), 4)
-        rise_count = sum(1 for _, typ, _ in peaks if typ == 'rise')
-        fall_count = sum(1 for _, typ, _ in peaks if typ == 'fall')
+        rise_count = sum(1 for _, typ, _ in peaks if typ == "rise")
+        fall_count = sum(1 for _, typ, _ in peaks if typ == "fall")
 
         self.assertEqual(rise_count, 2)
         self.assertEqual(fall_count, 2)
@@ -118,7 +122,7 @@ class TestFindPeaksAndTypes(unittest.TestCase):
 
         # Expect only 1 rising edge due to min_separation filtering
         self.assertEqual(len(peaks), 1)
-        self.assertEqual(peaks[0][1], 'rise')
+        self.assertEqual(peaks[0][1], "rise")
 
 
 class TestWaveformMetrics(unittest.TestCase):
@@ -286,7 +290,7 @@ class TestInterpolateCrossing(unittest.TestCase):
         self.assertAlmostEqual(np.interp(end, self.x, y), min(thresholds), delta=1e-3)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     logging.basicConfig()
     log.setLevel(logging.DEBUG)
     logging.getLogger().setLevel(logging.DEBUG)

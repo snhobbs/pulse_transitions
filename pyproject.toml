@@ -120,7 +120,6 @@ exclude = [
     "venv",
     "*/migrations/*.py",
     "staticfiles/*",
-    "tests/",
     "*.ipynb"
 ]
 line-length = 88
@@ -185,6 +184,8 @@ select = [
   #"RUF"
 ]
 ignore = [
+  "PT027",
+  "PT009",
   "PLR2004",
   "N803",
   "PLR0913",
