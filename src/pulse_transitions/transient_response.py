@@ -14,7 +14,6 @@ from . import impl
 from .common import CrossingDetectionSettings
 from .common import Edge
 from .common import EdgeSign
-from .common import PairedEdge
 from .common import Peak
 
 NumberIterable = Union[np.ndarray, Iterable[Union[int, float]]]
@@ -67,8 +66,9 @@ def detect_thresholds(x: NumberIterable, y: NumberIterable, method="histogram",
     y = np.asarray(y, dtype=float)
 
     low, high, *_ = detect_signal_levels(x, y, method=method, **kwargs)
+    levels = (low, high)
 
-    return impl._calculate_thresholds(x, y, [low, high], thresholds=thresholds)
+    return impl._calculate_thresholds(x, y, levels=levels, thresholds=thresholds)
 
 
 def detect_first_edge(x: NumberIterable, y: NumberIterable,
@@ -141,55 +141,6 @@ def detect_edges(x: NumberIterable, y: NumberIterable,
             continue
     return edges
 
-def detect_overshoot(x, y: NumberIterable, method="histogram"):
-    """
-    Estimate signal levels, then compute overshoot and undershoot.
-
-    Args:
-        x (array-like): Time or index array.
-        y (array-like): Signal data.
-        method (str): Level detection method.
-
-    Returns:
-        tuple: (undershoot_fraction, overshoot_fraction)
-    """
-
-    levels = detect_signal_levels(x, y, method=method)
-    return impl._calculate_overshoot(y, levels=levels)
-
-def pair_edges(edges: list[Edge], *, max_gap: float = None) -> list[PairedEdge]:
-    """
-    Pair rising and falling edges into pulses based on order and timing.
-
-    Args:
-        edges (list[Edge]): List of edges to pair.
-        max_gap (float, optional): Maximum allowed gap between rising and falling edge.
-
-    Returns:
-        list[PairedEdge]: List of valid rising/falling edge pairs.
-    """
-
-    edges = sorted(edges, key=lambda e: e.start)
-    pairs = []
-    used_indices = set()
-
-    for i, first_edge in enumerate(edges):
-        if first_edge.sign != EdgeSign.rising or i in used_indices:
-            continue
-        for j in range(i + 1, len(edges)):
-            if j in used_indices:
-                continue
-            second_edge = edges[j]
-            if second_edge.sign == EdgeSign.falling:
-                if max_gap is not None and (second_edge.start - first_edge.end) > max_gap:
-                    break
-                pair = PairedEdge(rise=first_edge, fall=second_edge)
-                if pair.is_valid:
-                    pairs.append(pair)
-                    used_indices.update({i, j})
-                    break
-                log.error("Edge is invalid")
-    return pairs
 
 #=========================
 # Matlab naming starts
@@ -272,23 +223,7 @@ def midcross(x, fs: Optional[float] = 1,
     if not levels:
         levels, *_ = statelevels(A=x_uniform, **kwargs)
 
-    # Midpoint level
-    mid = 0.5 * (levels[0] + levels[1])
-
-    # Find the first crossing
-    above = x_uniform > mid
-    crossings = np.where(np.diff(above.astype(int)) != 0)[0]
-
-    if crossings.size == 0:
-        return 0
-
-    idx = crossings[0]
-    # Linear interpolation for more precise crossing time
-    x0, x1 = x_uniform[idx], x_uniform[idx + 1]
-    t0, t1 = t_uniform[idx], t_uniform[idx + 1]
-
-    frac = (mid - x0) / (x1 - x0)
-    return t0 + frac * (t1 - t0)  # tcross
+    return impl._calculate_midcross(x=t_uniform, y=x_uniform, levels=levels)
 
 def overshoot(x: NumberIterable,
               levels: Optional[Tuple[float, float]]=None,
@@ -307,22 +242,7 @@ def overshoot(x: NumberIterable,
     if not levels:
         levels, *_ = statelevels(A=x, **kwargs)
 
-    low, high = levels
-    step_height = high - low
-    if step_height == 0:
-        return 0
-
-    # Detect step direction
-    rising = np.abs(x[-1] - high) < np.abs(x[-1] - low)
-
-    if rising:
-        max_val = np.max(x)
-        overshoot_val = max_val - high
-    else:
-        min_val = np.min(x)
-        overshoot_val = low - min_val
-
-    return max(0.0, overshoot_val / step_height)
+    return impl._calculate_overshoot(y=x, levels=levels)
 
 
 def undershoot(x: NumberIterable,
@@ -339,45 +259,10 @@ def undershoot(x: NumberIterable,
         float: Undershoot fraction.
     """
 
-    # Estimate state levels if not provided
-    if levels is None:
-        levels, *_ = statelevels(x, **kwargs)
+    if not levels:
+        levels, *_ = statelevels(A=x, **kwargs)
 
-    low, high = levels
-    step_height = high - low
-    if step_height == 0:
-        return 0
-
-    x = np.asarray(x)
-    # Detect step direction (rising or falling)
-    rising = np.abs(x[-1] - high) < np.abs(x[-1] - low)
-
-    # Find step edge index by locating midpoint crossing
-    mid = 0.5 * (low + high)
-    above = x > mid
-    crossings = np.where(np.diff(above.astype(int)) != 0)[0]
-
-    if crossings.size == 0:
-        return 0
-
-    edge_idx = crossings[0]
-
-    # Define post-edge analysis window (make sure not to exceed signal length)
-    start_idx = edge_idx + 1
-    end_idx = len(x)
-    post_edge = x[start_idx:end_idx]
-
-    if rising:
-        # Undershoot is how far the minimum after the edge falls below low level
-        min_val = np.min(post_edge)
-        undershoot_val = high - min_val
-    else:
-        # Undershoot is how far the maximum after the edge rises above high level
-        max_val = np.max(post_edge)
-        undershoot_val = max_val - low
-
-    return undershoot_val / abs(step_height)
-
+    return impl._calculate_undershoot(y=x, levels=levels)
 
 def slew_rate(x: NumberIterable, fs: Optional[float] = 1,
              t: Optional[NumberIterable]=None,
@@ -395,17 +280,7 @@ def slew_rate(x: NumberIterable, fs: Optional[float] = 1,
     """
     x_uniform, t_uniform = impl._get_xtime_from_t_fs(x=x, fs=fs, t=t)
 
-    # Calculate the discrete derivative dy/dx
-    slew = np.gradient(x_uniform, t_uniform)
-
-    # Remove any NaN or infinite values due to zero dx
-    slew = slew[np.isfinite(slew)]
-
-    if len(slew) == 0:
-        return 0
-
-    return np.max(np.abs(slew))
-
+    return impl._calculate_slew_rate(x=t_uniform, y=x_uniform)
 
 def settling_time(x: NumberIterable, d: float = 0.02,
                  fs: Optional[float] = 1,
@@ -427,35 +302,10 @@ def settling_time(x: NumberIterable, d: float = 0.02,
     Returns:
         float: Settling time in units of t (or samples if t is None).
     """
-    x_uniform, t_uniform = impl._get_xtime_from_t_fs(x=x, fs=fs, t=t)
 
     if levels is None:
-        levels, *_ = statelevels(A=x_uniform, **kwargs)
-    low, high = levels
+        levels, *_ = statelevels(A=x, **kwargs)
 
-    step_height = high - low
-    if step_height == 0:
-        return 0
+    x_uniform, t_uniform = impl._get_xtime_from_t_fs(x=x, fs=fs, t=t)
 
-    # Define settling band around final value
-    final_val = x_uniform[-1]
-    tol = d * abs(step_height)
-    lower_bound = final_val - tol
-    upper_bound = final_val + tol
-
-    # Find indices where signal is outside settling band
-    out_of_bounds = np.where((x_uniform < lower_bound) | (x_uniform > upper_bound))[0]
-
-    if len(out_of_bounds) == 0:
-        # Signal is always within settling band
-        return t_uniform[0]
-
-    # Last time index outside settling band
-    last_out_idx = out_of_bounds[-1]
-
-    settling_t = t_uniform[last_out_idx]
-
-    if settling_time_margin is not None:
-        settling_t += settling_time_margin
-
-    return settling_t
+    return impl._calculate_settling_time(y=x_uniform, x=t_uniform, settling_time_margin=settling_time_margin, settling_time_fraction=d, levels=levels)
