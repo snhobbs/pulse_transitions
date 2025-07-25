@@ -1,9 +1,7 @@
 from enum import Enum
-from enum import StrEnum
 from typing import Tuple
 
 from pydantic import BaseModel
-from pydantic import Extra
 from pydantic import model_validator
 
 
@@ -13,10 +11,11 @@ class EdgeSign(Enum):
     none = 0
 
 class StrictBaseModel(BaseModel):
-    class Config:
-        extra = Extra.forbid  # No extra fields allowed
+    model_config = {
+        "extra": "forbid"  # Disallow extra fields
+    }
 
-class GroupStrategy(StrEnum):
+class GroupStrategy(Enum):
     median = "median"
     mode = "mode"
     first = "first"
