@@ -32,8 +32,7 @@ def normalize(y: NumberIterable) -> np.ndarray:
     y = np.asarray(y, dtype=float)
     y_min, y_max = y.min(), y.max()
     denom = y_max - y_min
-    y_norm = (y - y_min) / denom if denom != 0 else np.zeros_like(y)
-    return y_norm
+    return (y - y_min) / denom if denom != 0 else np.zeros_like(y)
 
 
 def denormalize(y: NumberIterable, y_norm: NumberIterable) -> np.ndarray:
@@ -65,7 +64,6 @@ def smooth_zero_phase(y: np.ndarray, normal_cutoff: int, fs: float, order: int =
     Returns:
         np.ndarray: Smoothed signal.
     """
-    nyq = 0.5 * fs
     b, a = scipy.signal.butter(order, normal_cutoff, btype="low", analog=False)
     return scipy.signal.filtfilt(b, a, y)
 
@@ -104,13 +102,15 @@ def _interpolate_crossing(x: np.ndarray, y: np.ndarray, thresholds: Tuple[float,
     i2_candidates = np.where(post_mask)[0]
 
     if len(i1_candidates) == 0 or len(i2_candidates) == 0:
-        raise IndexError("Edge doesn't cross thresholds")
+        msg = "Edge doesn't cross thresholds"
+        raise IndexError(msg)
 
     i1 = i1_candidates[-1] # + i1_range.start
     i2 = i2_candidates[0]  #+ i2_range.start
 
     if i1 + 1 >= n or i2 >= n or i2 < 1:
-        raise IndexError("Edge interpolation range out of bounds")
+        msg = "Edge interpolation range out of bounds"
+        raise IndexError(msg)
 
     # Do a linear interpolation for both thresholds to find the closest crossing in x
     x_cross_lo = np.interp(
@@ -136,7 +136,8 @@ def _split_pulses(
     Use a fractional threshold (10/90%, 20/80% etc) to find the crossings
     Find the midpoint crossings and split at 50% between them. If no crossing before or after then include all the rest of the signal.
     """
-    raise NotImplementedError("Pulse splitting logic not implemented yet.")
+    msg = "Pulse splitting logic not implemented yet."
+    raise NotImplementedError(msg)
 
 def _find_peaks_and_types_histogram():
     """
@@ -161,13 +162,11 @@ def choose_peak_from_group(group: List[Peak], strategy: GroupStrategy = GroupStr
     if strategy == GroupStrategy.mode:
         peaks = {p.index: p for p in group}
         idx = int(np.mode(list(peaks.keys())))
-        peak = peaks[idx]
-        return peak
+        return peaks[idx]
     if strategy == GroupStrategy.median:
         peaks = {p.index: p for p in group}
         idx = int(np.median(list(peaks.keys())))
-        peak = peaks[idx]
-        return peak
+        return peaks[idx]
     msg = f"Unknown GroupStrategy {strategy}"
     raise ValueError(msg)
 
@@ -387,10 +386,7 @@ def detect_signal_levels_with_derivative(_, y: NumberIterable, *, smooth_sigma: 
     Returns:
         tuple: (low_level, high_level)
     """
-    if smooth_sigma > 0:
-        y_smooth = gaussian_filter1d(y, sigma=smooth_sigma)
-    else:
-        y_smooth = y
+    y_smooth = gaussian_filter1d(y, sigma=smooth_sigma) if smooth_sigma > 0 else y
 
     dy = np.gradient(y_smooth)
     flatness = np.abs(dy)

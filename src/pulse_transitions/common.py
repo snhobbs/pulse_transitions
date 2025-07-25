@@ -52,7 +52,8 @@ class Edge(BaseModel):
     @model_validator(mode="after")
     def validate_edge(self) -> "Edge":
         if self.start >= self.end:
-            raise ValueError("Edge start must be before end")
+            msg = "Edge start must be before end"
+            raise ValueError(msg)
         return self
 
     @property

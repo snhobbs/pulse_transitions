@@ -185,6 +185,7 @@ select = [
   #"RUF"
 ]
 ignore = [
+  "PLR2004",
   "N803",
   "PLR0913",
   "UP007",
