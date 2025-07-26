@@ -1,6 +1,7 @@
 # pulse_transitions
 This library implements a python version of the [Pulse and Transition Metrics function category](https://www.mathworks.com/help/signal/pulse-and-transition-metrics.html?s_tid=CRUX_lftnav) in Matlab.
 
+![Second Order System](second-order.png)
 
 | Function                                                                    | Description                                                       |                  | Implemented?
 | --------------------------------------------------------------------------- | ----------------------------------------------------------------- | ---------------- |---------

@@ -5,18 +5,18 @@ import numpy as np
 from scipy.signal import lsim
 from scipy.signal import lti
 
-from pulse_transitions import falltime
-from pulse_transitions import midcross
-from pulse_transitions import overshoot
-from pulse_transitions import risetime
-from pulse_transitions import statelevels
-from pulse_transitions import undershoot
 from pulse_transitions.common import CrossingDetectionSettings
 from pulse_transitions.common import EdgeSign
 from pulse_transitions.impl import _find_peaks_and_types
 from pulse_transitions.impl import _interpolate_crossing
-from pulse_transitions.transient_response import settling_time
-from pulse_transitions.transient_response import slew_rate
+from pulse_transitions.matpulse import falltime
+from pulse_transitions.matpulse import midcross
+from pulse_transitions.matpulse import overshoot
+from pulse_transitions.matpulse import risetime
+from pulse_transitions.matpulse import settling_time
+from pulse_transitions.matpulse import slew_rate
+from pulse_transitions.matpulse import statelevels
+from pulse_transitions.matpulse import undershoot
 
 log = logging.getLogger("testing")
 
@@ -161,23 +161,25 @@ class TestWaveformMetrics(unittest.TestCase):
         self.assertTrue(0.4 < mid < 0.6)
 
     def test_overshoot_clean_step(self):
-        self.assertAlmostEqual(overshoot(self.rising), 0.0, places=6)
+        _, ov = overshoot(self.rising)
+        self.assertAlmostEqual(ov, 0.0, places=6)
 
     def test_undershoot_clean_step(self):
-        self.assertAlmostEqual(undershoot(self.rising), 0.0, places=2)
+        _, un = undershoot(self.rising)
+        self.assertAlmostEqual(un, 0.0, places=2)
 
     def test_overshoot_detected(self):
         t = np.linspace(0, 1, 1000)
         rising_overshoot = np.where(t >= 0.5, 1.0, 0.0) + np.where((t >= 0.5) & (t <= 0.6), 0.2, 0.0)
         rising_overshoot_undershoot = rising_overshoot + np.where((t >= 0.55) & (t <= 0.65), -0.2, 0)
-        un = overshoot(rising_overshoot_undershoot)
+        _, un = overshoot(rising_overshoot_undershoot)
         self.assertAlmostEqual(un, 0.2, 2)
 
     def test_undershoot_detected(self):
         t = np.linspace(0, 1, 1000)
         rising_overshoot = np.where(t >= 0.5, 1.0, 0.0) + np.where((t >= 0.5) & (t <= 0.6), 0.2, 0.0)
         rising_overshoot_undershoot = rising_overshoot + np.where((t >= 0.55) & (t <= 0.65), -0.2, 0)
-        un = undershoot(rising_overshoot_undershoot)
+        _, un = undershoot(rising_overshoot_undershoot)
         self.assertAlmostEqual(un, 0.2, 2)
 
 
@@ -204,14 +206,14 @@ class TestSecondOrderSystem(unittest.TestCase):
         self.assertTrue(0.01 < mc < 0.3)
 
     def test_overshoot(self):
-        ov = overshoot(self.y)
+        _, ov = overshoot(self.y)
         self.assertGreater(ov, 0.5)
         self.assertLess(ov, 0.6)  # should overshoot but not too much
 
     def test_undershoot(self):
-        un = undershoot(self.y)
-        self.assertGreater(un, 0.4)
-        self.assertLess(un, 0.6)  # should but not too much
+        _, un = undershoot(self.y)
+        self.assertGreater(un, 0.25)
+        self.assertLess(un, 0.35)  # should but not too much
 
 
 class TestSlewRateSimple(unittest.TestCase):
