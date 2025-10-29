@@ -2,6 +2,7 @@
 Transient response edge detection module.
 
 """
+
 import logging
 from collections.abc import Iterable
 from typing import Optional
@@ -19,13 +20,18 @@ NumberIterable = Union[np.ndarray, Iterable[Union[int, float]]]
 log = logging.getLogger("pulse_transitions")
 
 
-#=========================
+# =========================
 # Matlab naming starts
-#=========================
+# =========================
 
 
-def statelevels(A: NumberIterable, nbins: int = 100, method="mode",
-                bounds: Tuple[float, float] = None, **kwargs):
+def statelevels(
+    A: NumberIterable,
+    nbins: int = 100,
+    method="mode",
+    bounds: Tuple[float, float] = None,
+    **kwargs,
+):
     """
     Estimate low/high levels for a bilevel waveform using histogram analysis.
 
@@ -39,15 +45,21 @@ def statelevels(A: NumberIterable, nbins: int = 100, method="mode",
         tuple: ((low_level, high_level), bin_centers, histogram)
     """
     y = A
-    low_level, high_level, bin_centers, smoothed_hist, _ = impl.detect_signal_levels_with_histogram(None, y, nbins=nbins, smooth_sigma=0)
+    low_level, high_level, bin_centers, smoothed_hist, _ = (
+        impl.detect_signal_levels_with_histogram(None, y, nbins=nbins, smooth_sigma=0)
+    )
     return (low_level, high_level), bin_centers, smoothed_hist
 
 
-def risetime(x: NumberIterable, fs: Optional[float]=1,
-             t: Optional[NumberIterable]=None,
-             levels: Optional[Tuple[float,float]]=None,
-             thresholds: Tuple[float,float]=(0.1, 0.9),
-             settings: Optional[CrossingDetectionSettings]=None, **kwargs) -> Optional[Edge]:
+def risetime(
+    x: NumberIterable,
+    fs: Optional[float] = 1,
+    t: Optional[NumberIterable] = None,
+    levels: Optional[Tuple[float, float]] = None,
+    fractional_thresholds: Tuple[float, float] = (0.1, 0.9),
+    settings: Optional[CrossingDetectionSettings] = None,
+    **kwargs,
+) -> Optional[Edge]:
     """
     Detect rising edge timing with interpolation.
 
@@ -55,18 +67,26 @@ def risetime(x: NumberIterable, fs: Optional[float]=1,
         Edge or None
     """
     x_uniform, t_uniform = impl._get_xtime_from_t_fs(x=x, fs=fs, t=t)
-    return impl._detect_edge_wrapper(sign=EdgeSign.rising,
-                        x=t_uniform,
-                        y=x_uniform,
-                        levels=levels,
-                        thresholds=thresholds,
-                        settings=settings, **kwargs)
+    return impl._detect_edge_wrapper(
+        sign=EdgeSign.rising,
+        x=t_uniform,
+        y=x_uniform,
+        levels=levels,
+        fractional_thresholds=fractional_thresholds,
+        settings=settings,
+        **kwargs,
+    )
 
-def falltime(x: NumberIterable, fs: Optional[float]=1,
-             t: Optional[NumberIterable]=None,
-             levels: Optional[Tuple[float,float]]=None,
-             thresholds: Tuple[float,float]=(0.1, 0.9),
-             settings: Optional[CrossingDetectionSettings]=None, **kwargs) -> Optional[Edge]:
+
+def falltime(
+    x: NumberIterable,
+    fs: Optional[float] = 1,
+    t: Optional[NumberIterable] = None,
+    levels: Optional[Tuple[float, float]] = None,
+    fractional_thresholds: Tuple[float, float] = (0.1, 0.9),
+    settings: Optional[CrossingDetectionSettings] = None,
+    **kwargs,
+) -> Optional[Edge]:
     """
     Detect falling edge timing with interpolation.
 
@@ -74,17 +94,24 @@ def falltime(x: NumberIterable, fs: Optional[float]=1,
         Edge or None
     """
     x_uniform, t_uniform = impl._get_xtime_from_t_fs(x=x, fs=fs, t=t)
-    return impl._detect_edge_wrapper(sign=EdgeSign.falling,
-                        x=t_uniform,
-                        y=x_uniform,
-                        levels=levels,
-                        thresholds=thresholds,
-                        settings=settings, **kwargs)
+    return impl._detect_edge_wrapper(
+        sign=EdgeSign.falling,
+        x=t_uniform,
+        y=x_uniform,
+        levels=levels,
+        fractional_thresholds=fractional_thresholds,
+        settings=settings,
+        **kwargs,
+    )
 
-def midcross(x, fs: Optional[float] = 1,
-             t: Optional[NumberIterable]=None,
-             levels: Optional[Tuple[float,float]]=None,
-             **kwargs) -> float:
+
+def midcross(
+    x,
+    fs: Optional[float] = 1,
+    t: Optional[NumberIterable] = None,
+    levels: Optional[Tuple[float, float]] = None,
+    **kwargs,
+) -> float:
     """
     Find mid-level crossing time of a bilevel signal.
 
@@ -104,9 +131,10 @@ def midcross(x, fs: Optional[float] = 1,
 
     return impl._calculate_midcross(x=t_uniform, y=x_uniform, levels=levels)
 
-def overshoot(x: NumberIterable,
-              levels: Optional[Tuple[float, float]]=None,
-              **kwargs) -> float:
+
+def overshoot(
+    x: NumberIterable, levels: Optional[Tuple[float, float]] = None, **kwargs
+) -> float:
     """
     Compute normalized overshoot fraction of a step response.
 
@@ -124,9 +152,9 @@ def overshoot(x: NumberIterable,
     return impl._calculate_overshoot(y=x, levels=levels)
 
 
-def undershoot(x: NumberIterable,
-               levels: Optional[Tuple[float, float]]=None,
-               **kwargs) -> float:
+def undershoot(
+    x: NumberIterable, levels: Optional[Tuple[float, float]] = None, **kwargs
+) -> float:
     """
     Compute normalized undershoot fraction of a step response.
 
@@ -143,9 +171,13 @@ def undershoot(x: NumberIterable,
 
     return impl._calculate_undershoot(y=x, levels=levels)
 
-def slew_rate(x: NumberIterable, fs: Optional[float] = 1,
-             t: Optional[NumberIterable]=None,
-             **kwargs):
+
+def slew_rate(
+    x: NumberIterable,
+    fs: Optional[float] = 1,
+    t: Optional[NumberIterable] = None,
+    **kwargs,
+):
     """
     Calculate the slew rate of a signal y with respect to x.
 
@@ -161,12 +193,16 @@ def slew_rate(x: NumberIterable, fs: Optional[float] = 1,
 
     return impl._calculate_slew_rate(x=t_uniform, y=x_uniform)
 
-def settling_time(x: NumberIterable, d: float = 0.02,
-                 fs: Optional[float] = 1,
-                 t: Optional[NumberIterable] = None,
-                 levels: Optional[Tuple[float, float]] = None,
-                 settling_time_margin: Optional[float] = None,
-                 **kwargs):
+
+def settling_time(
+    x: NumberIterable,
+    d: float = 0.02,
+    fs: Optional[float] = 1,
+    t: Optional[NumberIterable] = None,
+    levels: Optional[Tuple[float, float]] = None,
+    settling_time_margin: Optional[float] = None,
+    **kwargs,
+):
     """
     Calculate the settling time of a step response signal.
 
@@ -187,4 +223,10 @@ def settling_time(x: NumberIterable, d: float = 0.02,
 
     x_uniform, t_uniform = impl._get_xtime_from_t_fs(x=x, fs=fs, t=t)
 
-    return impl._calculate_settling_time(y=x_uniform, x=t_uniform, settling_time_margin=settling_time_margin, settling_time_fraction=d, levels=levels)
+    return impl._calculate_settling_time(
+        y=x_uniform,
+        x=t_uniform,
+        settling_time_margin=settling_time_margin,
+        settling_time_fraction=d,
+        levels=levels,
+    )

@@ -1,10 +1,9 @@
 """
 Transient response edge detection module.
-
 """
+
 import logging
 from collections.abc import Iterable
-from typing import Dict
 from typing import Optional
 from typing import Tuple
 from typing import Union
@@ -14,9 +13,10 @@ import numpy as np
 from . import impl
 from .common import CrossingDetectionSettings
 from .common import Edge
-from .common import EdgeSign
+from .common import EdgeSign, EdgeMetrics
 
-NumberIterable = Union[np.ndarray, Iterable[Union[int, float]]]
+Number = Union[float, int]
+NumberIterable = Iterable[Number]
 log = logging.getLogger("pulse_transitions")
 
 calculate_thresholds = impl._calculate_thresholds
@@ -25,21 +25,27 @@ detect_thresholds = impl._detect_thresholds
 detect_first_edge = impl._detect_first_edge
 
 
-def detect_edges(x: NumberIterable, y: NumberIterable,
-                 thresholds: Tuple[float,float]=(0.1, 0.9),
-                 levels: Optional[Tuple[float, float]] = None,
-                 *, bounds=None,
-                 settings: Optional[CrossingDetectionSettings] = None, **kwargs) -> list[Edge]:
+def detect_edges(
+    x: NumberIterable,
+    y: NumberIterable,
+    fractional_thresholds: Tuple[float, float] = (0.1, 0.9),
+    levels: Optional[Tuple[float, float]] = None,
+    *,
+    bounds=None,
+    settings: Optional[CrossingDetectionSettings] = None,
+    **kwargs,
+) -> list[Edge]:
     """
     Takes a 2 level signal.
     Either receives or calculates the levels.
     Use a fractional threshold (10/90%, 20/80% etc) to find the crossings
-    Find the midpoint crossings and split at 50% between them. If no crossing before or after then include all the rest of the signal.
+    Find the midpoint crossings and split at 50% between them.
+    If no crossing before or after then include all the rest of the signal.
 
     Args:
         x (array-like): Time or index array.
         y (array-like): Signal data.
-        thresholds (tuple): Threshold values.
+        fractional_thresholds (tuple): Threshold values.
         bounds (tuple, optional): Time bounds to restrict analysis.
         settings (CrossingDetectionSettings): Detection configuration.
 
@@ -47,89 +53,133 @@ def detect_edges(x: NumberIterable, y: NumberIterable,
         list[Edge]: List of detected edges.
     """
     if levels is None:
-        low_level, high_level, *_ = impl.detect_signal_levels_with_histogram(None, y=y, **kwargs)
+        low_level, high_level, *_ = impl.detect_signal_levels_with_histogram(
+            None, y=y, **kwargs
+        )
         levels = (low_level, high_level)
 
-    absolute_thresholds = impl._calculate_thresholds(x, y, levels, thresholds)
+    absolute_thresholds = impl._calculate_thresholds(
+        x, y, levels, fractional_thresholds=fractional_thresholds
+    )
     if not settings:
         settings = CrossingDetectionSettings()
-    return impl._detect_edges(x=x, y=y, thresholds=absolute_thresholds, settings=settings)
+    return impl._detect_edges(
+        x=x, y=y, thresholds=absolute_thresholds, settings=settings
+    )
 
 
-def get_rising_edge(x: NumberIterable, y: NumberIterable,
-             levels: Optional[Tuple[float,float]]=None,
-             thresholds: Tuple[float,float]=(0.1, 0.9),
-             settings: Optional[CrossingDetectionSettings]=None, **kwargs) -> Optional[Edge]:
+def get_rising_edge(
+    x: NumberIterable,
+    y: NumberIterable,
+    levels: Optional[Tuple[float, float]] = None,
+    fractional_thresholds: Tuple[float, float] = (0.1, 0.9),
+    settings: Optional[CrossingDetectionSettings] = None,
+    **kwargs,
+) -> Optional[Edge]:
     """
     Detect rising edge timing with interpolation.
 
     Returns:
         Edge or None
     """
-    return impl._detect_edge_wrapper(sign=EdgeSign.rising,
-                        x=x, y=y,
-                        levels=levels,
-                        thresholds=thresholds,
-                        settings=settings, **kwargs)
+    return impl._detect_edge_wrapper(
+        sign=EdgeSign.rising,
+        x=x,
+        y=y,
+        levels=levels,
+        fractional_thresholds=fractional_thresholds,
+        settings=settings,
+        **kwargs,
+    )
 
-def get_falling_edge(x: NumberIterable, y: NumberIterable,
-             levels: Optional[Tuple[float,float]]=None,
-             thresholds: Tuple[float,float]=(0.1, 0.9),
-             settings: Optional[CrossingDetectionSettings]=None, **kwargs) -> Optional[Edge]:
+
+def get_falling_edge(
+    x: NumberIterable,
+    y: NumberIterable,
+    levels: Optional[Tuple[float, float]] = None,
+    fractional_thresholds: Tuple[float, float] = (0.1, 0.9),
+    settings: Optional[CrossingDetectionSettings] = None,
+    **kwargs,
+) -> Optional[Edge]:
     """
     Detect falling edge timing with interpolation.
 
     Returns:
         Edge or None
     """
-    return impl._detect_edge_wrapper(sign=EdgeSign.falling,
-                        x=x, y=y,
-                        levels=levels,
-                        thresholds=thresholds,
-                        settings=settings, **kwargs)
+    return impl._detect_edge_wrapper(
+        sign=EdgeSign.falling,
+        x=x,
+        y=y,
+        levels=levels,
+        fractional_thresholds=fractional_thresholds,
+        settings=settings,
+        **kwargs,
+    )
 
 
-def calculate_risetime(x: NumberIterable, y: NumberIterable,
-             levels: Optional[Tuple[float,float]]=None,
-             thresholds: Tuple[float,float]=(0.1, 0.9),
-             settings: Optional[CrossingDetectionSettings]=None, **kwargs) -> Optional[float]:
+def calculate_risetime(
+    x: NumberIterable,
+    y: NumberIterable,
+    levels: Optional[Tuple[float, float]] = None,
+    fractional_thresholds: Tuple[float, float] = (0.1, 0.9),
+    settings: Optional[CrossingDetectionSettings] = None,
+    **kwargs,
+) -> Optional[Tuple[float, Edge]]:
     """
     Detect rising edge timing with interpolation.
 
     Returns:
         Edge or None
     """
-    edge = impl._detect_edge_wrapper(sign=EdgeSign.rising,
-                        x=x, y=y,
-                        levels=levels,
-                        thresholds=thresholds,
-                        settings=settings, **kwargs)
+    edge = impl._detect_edge_wrapper(
+        sign=EdgeSign.rising,
+        x=x,
+        y=y,
+        levels=levels,
+        fractional_thresholds=fractional_thresholds,
+        settings=settings,
+        **kwargs,
+    )
     if edge:
-        return edge.end - edge.start
+        return edge.end - edge.start, edge
     return None
 
-def calculate_falltime(x: NumberIterable, y: NumberIterable,
-             levels: Optional[Tuple[float,float]]=None,
-             thresholds: Tuple[float,float]=(0.1, 0.9),
-             settings: Optional[CrossingDetectionSettings]=None, **kwargs) -> Optional[float]:
+
+def calculate_falltime(
+    x: NumberIterable,
+    y: NumberIterable,
+    levels: Optional[Tuple[float, float]] = None,
+    fractional_thresholds: Tuple[float, float] = (0.1, 0.9),
+    settings: Optional[CrossingDetectionSettings] = None,
+    **kwargs,
+) -> Optional[Tuple[float, Edge]]:
     """
     Detect falling edge timing with interpolation.
 
     Returns:
         Edge or None
     """
-    edge = impl._detect_edge_wrapper(sign=EdgeSign.falling,
-                        x=x, y=y,
-                        levels=levels,
-                        thresholds=thresholds,
-                        settings=settings, **kwargs)
+    edge = impl._detect_edge_wrapper(
+        sign=EdgeSign.falling,
+        x=x,
+        y=y,
+        levels=levels,
+        fractional_thresholds=fractional_thresholds,
+        settings=settings,
+        **kwargs,
+    )
     if edge:
-        return edge.end - edge.start
+        return edge.end - edge.start, edge
     return None
 
-def calculate_midcross(x: NumberIterable, y: NumberIterable,
-             levels: Optional[Tuple[float,float]]=None,
-             **kwargs) -> float:
+
+def calculate_midcross(
+    x: NumberIterable,
+    y: NumberIterable,
+    levels: Optional[Tuple[float, float]] = None,
+    **kwargs,
+) -> float:
     """
     Find mid-level crossing time of a bilevel signal.
 
@@ -143,14 +193,17 @@ def calculate_midcross(x: NumberIterable, y: NumberIterable,
     """
 
     if not levels:
-        low_level, high_level, *_ = impl.detect_signal_levels_with_histogram(None, y=y, **kwargs)
+        low_level, high_level, *_ = impl.detect_signal_levels_with_histogram(
+            None, y=y, **kwargs
+        )
         levels = (low_level, high_level)
 
     return impl._calculate_midcross(x=x, y=y, levels=levels)
 
-def calculate_overshoot(y: NumberIterable,
-              levels: Optional[Tuple[float, float]]=None,
-              **kwargs) -> float:
+
+def calculate_overshoot(
+    y: NumberIterable, levels: Optional[Tuple[float, float]] = None, **kwargs
+) -> Tuple[int, float]:
     """
     Compute normalized overshoot fraction of a step response.
 
@@ -160,20 +213,21 @@ def calculate_overshoot(y: NumberIterable,
         levels (tuple, optional): Low/high state levels.
 
     Returns:
-        float: Overshoot fraction.
+        tuple[int, float]: Index, Overshoot fraction.
     """
 
     if not levels:
-        low_level, high_level, *_ = impl.detect_signal_levels_with_histogram(None, y=y, **kwargs)
+        low_level, high_level, *_ = impl.detect_signal_levels_with_histogram(
+            None, y=y, **kwargs
+        )
         levels = (low_level, high_level)
 
     return impl._calculate_overshoot(y=y, levels=levels)
 
 
 def calculate_undershoot(
-               y: NumberIterable,
-               levels: Optional[Tuple[float, float]]=None,
-               **kwargs) -> float:
+    y: NumberIterable, levels: Optional[Tuple[float, float]] = None, **kwargs
+) -> Tuple[int, float]:
     """
     Compute normalized undershoot fraction of a step response.
 
@@ -182,17 +236,19 @@ def calculate_undershoot(
         levels (tuple, optional): Low/high state levels.
 
     Returns:
-        float: Undershoot fraction.
+        tuple[int, float]: Index, Undershoot fraction.
     """
 
     if not levels:
-        low_level, high_level, *_ = impl.detect_signal_levels_with_histogram(None, y=y, **kwargs)
+        low_level, high_level, *_ = impl.detect_signal_levels_with_histogram(
+            None, y=y, **kwargs
+        )
         levels = (low_level, high_level)
 
     return impl._calculate_undershoot(y=y, levels=levels)
 
-def calculate_slew_rate(x: NumberIterable, y: NumberIterable,
-             **kwargs):
+
+def calculate_slew_rate(x: NumberIterable, y: NumberIterable, **kwargs):
     """
     Calculate the slew rate of a signal y with respect to x.
 
@@ -206,12 +262,15 @@ def calculate_slew_rate(x: NumberIterable, y: NumberIterable,
     """
     return impl._calculate_slew_rate(x=x, y=y)
 
-def calculate_settling_time(x: NumberIterable,
-                 y: NumberIterable,
-                 settling_time_fraction: float = 0.02,
-                 settling_time_margin: Optional[float] = None,
-                 levels: Optional[Tuple[float, float]] = None,
-                 **kwargs):
+
+def calculate_settling_time(
+    x: NumberIterable,
+    y: NumberIterable,
+    settling_time_fraction: float = 0.02,
+    settling_time_margin: float = 0,
+    levels: Optional[Tuple[float, float]] = None,
+    **kwargs,
+):
     """
     Calculate the settling time of a step response signal.
 
@@ -227,35 +286,54 @@ def calculate_settling_time(x: NumberIterable,
     """
 
     if levels is None:
-        low_level, high_level, *_ = impl.detect_signal_levels_with_histogram(None, y=y, **kwargs)
+        low_level, high_level, *_ = impl.detect_signal_levels_with_histogram(
+            None, y=y, **kwargs
+        )
         levels = (low_level, high_level)
 
-    return impl._calculate_settling_time(y=y, x=x,
-                        settling_time_margin=settling_time_margin,
-                        settling_time_fraction=settling_time_fraction,
-                        levels=levels)
+    return impl._calculate_settling_time(
+        y=y,
+        x=x,
+        settling_time_margin=settling_time_margin,
+        settling_time_fraction=settling_time_fraction,
+        levels=levels,
+    )
 
 
-def get_edge_metrics(x: NumberIterable,
-                     y: NumberIterable,
-                     settling_time_fraction: float = 0.02,
-                     levels: Optional[Tuple[float, float]] = None,
-                     thresholds: Tuple[float,float]=(0.1, 0.9), **kwargs) -> Dict[str, float]:
+def get_edge_metrics(
+    x: NumberIterable,
+    y: NumberIterable,
+    settling_time_fraction: float = 0.02,
+    levels: Optional[Tuple[float, float]] = None,
+    fractional_thresholds: Tuple[float, float] = (0.1, 0.9),
+    **kwargs,
+) -> EdgeMetrics:
     if levels is None:
-        low_level, high_level, *_ = impl.detect_signal_levels_with_histogram(None, y=y, **kwargs)
+        low_level, high_level, *_ = impl.detect_signal_levels_with_histogram(
+            None, y=y, **kwargs
+        )
         levels = (low_level, high_level)
 
-    absolute_thresholds = impl._calculate_thresholds(x, y, levels, thresholds=thresholds)
+    thresholds = impl._calculate_thresholds(
+        x, y, levels, fractional_thresholds=fractional_thresholds
+    )
 
-    return {
-        "fractional_thresholds": thresholds,
-        "absolute_thresholds": absolute_thresholds,
-        "levels": levels,
-        "midcross": calculate_midcross(x, y, levels=levels),
-        "risetime": calculate_risetime(x, y, thresholds=thresholds, levels=levels),
-        "falltime": calculate_falltime(x, y, thresholds=thresholds, levels=levels),
-        "slewrate": calculate_slew_rate(x, y),
-        "overshoot": calculate_overshoot(y, levels=levels),
-        "undershoot": calculate_undershoot(y, levels=levels),
-        "settling_time": calculate_settling_time(x, y, levels=levels, settling_time_fraction=settling_time_fraction),
-    }
+    return EdgeMetrics(
+        fractional_thresholds=fractional_thresholds,
+        settling_time_fraction=settling_time_fraction,
+        thresholds=thresholds,
+        levels=levels,
+        midcross=calculate_midcross(x, y, levels=levels),
+        risetime=calculate_risetime(
+            x, y, fractional_thresholds=fractional_thresholds, levels=levels
+        ),
+        falltime=calculate_falltime(
+            x, y, fractional_thresholds=fractional_thresholds, levels=levels
+        ),
+        slewrate=calculate_slew_rate(x, y),
+        overshoot=calculate_overshoot(y, levels=levels),
+        undershoot=calculate_undershoot(y, levels=levels),
+        settling_time=calculate_settling_time(
+            x, y, levels=levels, settling_time_fraction=settling_time_fraction
+        ),
+    )

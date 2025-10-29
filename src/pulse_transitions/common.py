@@ -1,5 +1,5 @@
 from enum import Enum
-from typing import Tuple
+from typing import Tuple, Optional
 
 from pydantic import BaseModel
 from pydantic import model_validator
@@ -10,10 +10,12 @@ class EdgeSign(Enum):
     rising = 1
     none = 0
 
+
 class StrictBaseModel(BaseModel):
     model_config = {
         "extra": "forbid"  # Disallow extra fields
     }
+
 
 class GroupStrategy(Enum):
     median = "median"
@@ -21,15 +23,18 @@ class GroupStrategy(Enum):
     first = "first"
     last = "last"
 
+
 class CrossingDetectionSettings(StrictBaseModel):
     """
     window (float): Area around an edge to isolate for threshold crossing
     filter_order (int): Butterworth filter order for smoothing before edge finding
     filter_cutoff(float): Fraction of Nyquist frequency to filter off
     """
+
     window: float = 0
     filter_order: int = 3
     filter_cutoff: float = 0.9
+
 
 class Edge(BaseModel):
     """
@@ -41,12 +46,14 @@ class Edge(BaseModel):
         dx (float): Duration between low and high threshold crossings.
         type (str): 'rise' or 'fall'.
     """
+
     start: float
     end: float
     ymin: float
     ymax: float
     thresholds: Tuple[float, float]
     sign: EdgeSign
+    fractional_thresholds: Tuple[float, float] = (0.1, 0.9)
 
     @model_validator(mode="after")
     def validate_edge(self) -> "Edge":
@@ -67,6 +74,7 @@ class Edge(BaseModel):
     def bound_high(self) -> Tuple[float, float]:
         return (max([self.end, self.start]), max(self.thresholds))
 
+
 class PairedEdge(BaseModel):
     rise: Edge
     fall: Edge
@@ -81,12 +89,28 @@ class PairedEdge(BaseModel):
 
     @property
     def is_valid(self) -> bool:
-        return ((self.rise.sign == EdgeSign.rising) and
-                (self.fall.sign == EdgeSign.falling) and
-                (self.fall.start >= self.rise.end))
+        return (
+            (self.rise.sign == EdgeSign.rising)
+            and (self.fall.sign == EdgeSign.falling)
+            and (self.fall.start >= self.rise.end)
+        )
 
 
 class Peak(BaseModel):
     sign: EdgeSign
     start: float
-    end: float # x value
+    end: float  # x value
+
+
+class EdgeMetrics(BaseModel):
+    fractional_thresholds: Tuple[float, float]
+    settling_time_fraction: float
+    thresholds: Tuple[float, float]
+    levels: Tuple[float, float]
+    midcross: float
+    risetime: Optional[Tuple[float, Edge]]
+    falltime: Optional[Tuple[float, Edge]]
+    slewrate: float
+    overshoot: Tuple[int, float]
+    undershoot: Tuple[int, float]
+    settling_time: float
