@@ -1,0 +1,26 @@
+# Theory
+
+- Rise time
+- Fall time
+- Overshoot
+  - Fraction and position
+- Undershoot
+  - Fraction and position
+- Maximum slew rate
+- Pulse width
+- Frequency
+- Duty cycle
+- Midpoint
+- Amplitude
+- Pulse top tilt
+- Settling time
+  - Percent settling
+  - Settling point
+- Thresholds
+  - Histogram method
+  - End points
+  - Derivative
+- List of edges
+  - Metrics
+  - Polarity
+  - Position

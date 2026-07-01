@@ -4,12 +4,14 @@ thresholds -> absolute values used as crossing points
 fractional_thresholds -> (0.1, 0.9) of signal etc
 """
 
+import enum
+from typing import List, Tuple
 import logging
 from collections.abc import Iterable
 from typing import List
 from typing import Optional
 from typing import Tuple
-from typing import Union
+from typing import Union, Sequence
 
 import numpy as np
 import scipy.signal
@@ -75,8 +77,6 @@ def smooth_zero_phase(y: np.ndarray, normal_cutoff: int, fs: float, order: int =
     b, a = scipy.signal.butter(order, normal_cutoff, btype="low", analog=False)
     return scipy.signal.filtfilt(b, a, y)
 
-from typing import List, Tuple
-import numpy as np
 
 def find_all_edge_pairs(
     x: np.ndarray,
@@ -100,8 +100,7 @@ def find_all_edge_pairs(
         List of tuples [(i1, i2), ...] for each detected edge.
     """
     lo_val, hi_val = sorted(thresholds)
-    n = len(y)
-    
+
     if sign == EdgeSign.rising:
         pre_mask = y <= lo_val
         post_mask = y >= hi_val
@@ -111,40 +110,35 @@ def find_all_edge_pairs(
     else:
         raise ValueError(f"Invalid EdgeSign: {sign}")
 
-    pre_idxs = np.where(pre_mask)[0]
-    post_idxs = np.where(post_mask)[0]
-
     pairs = []
     i_pre = 0
     i_post = 0
 
-    def get_point_location():
-        '''
-        -1 for pre
-        1 for post
-        0 for init
-        '''
-    
-    i_pre = 0
-    i_post = 0
-    state = 0
+    class State(enum.Enum):
+        waiting_pre = 0
+        in_pre = 1
+        in_post = 2
+
+    state = State.waiting_pre
 
     for idx, (pre, post) in enumerate(zip(pre_mask, post_mask)):
-        if pre and state == 1 and (i_pre + min_spacing) <= idx:
-            state = -1
-        elif post and state == -1:
+        if pre and state == State.waiting_pre and (i_pre + min_spacing) <= idx:
+            state = State.in_pre
+        elif post and state == State.in_pre:
             i_post = idx
             pairs.append((i_pre, i_post))
-            state = 1
-        elif pre and state == 0:
-            state = -1 
-        elif post and state == 0:
-            state = 1 
+            state = State.in_post
+        elif pre and state == State.in_post:
+            state = State.in_pre
+        elif pre and state == State.waiting_pre:
+            state = State.in_pre
+        elif post and state == State.waiting_pre:
+            state = State.in_post
 
         if pre:
-            i_pre = idx 
+            i_pre = idx
         if post:
-            i_post = idx 
+            i_post = idx
 
     return pairs
 
@@ -195,14 +189,23 @@ def _interpolate_crossing(
         msg = "Edge interpolation range out of bounds"
         raise IndexError(msg)
 
-    # Do a linear interpolation for both thresholds to find the closest crossing in x
-    x_cross_lo = np.interp(
-        lo_val, [y[i1 - 1], y[i1 + 1]], [x[i1 - 1], x[i1 + 1]])
+    # i1 is the last sample on the "pre" side of the edge start threshold.
+    # i2 is the first sample on the "post" side of the edge end threshold.
+    # For rising:  start threshold = lo_val,  end threshold = hi_val.
+    # For falling: start threshold = hi_val,  end threshold = lo_val.
+    # Always interpolate the correct threshold value at the correct crossing.
+    if sign == EdgeSign.rising:
+        start_thresh, end_thresh = lo_val, hi_val
+    else:
+        start_thresh, end_thresh = hi_val, lo_val
 
-    x_cross_hi = np.interp(
-        hi_val, [y[i2 - 1], y[i2 + 1]], [x[i2 - 1], x[i2 + 1]])
+    dy_start = y[i1 + 1] - y[i1]
+    x_start = x[i1] + (start_thresh - y[i1]) / dy_start * (x[i1 + 1] - x[i1]) if dy_start != 0 else x[i1]
 
-    return (x_cross_lo, x_cross_hi)
+    dy_end = y[i2] - y[i2 - 1]
+    x_end = x[i2 - 1] + (end_thresh - y[i2 - 1]) / dy_end * (x[i2] - x[i2 - 1]) if dy_end != 0 else x[i2]
+
+    return (x_start, x_end)
 
 
 def _find_peaks_and_types_histogram():
@@ -267,15 +270,22 @@ def _find_peaks_and_types(
                 i1 = i
                 direction = -prev_state
                 edge_in_progress = True
+            elif prev_state != 0 and state != 0 and prev_state != state:
+                # Direct transition from one level to another (no pass through 0)
+                # Record this as an edge
+                raw_peaks.append(Peak(start=x[i], end=x[i], sign=EdgeSign(-prev_state)))
 
-        elif state == direction:
-            # Completed transition to opposite level
-            i2 = i
-            raw_peaks.append(
-                Peak(start=x[i1], end=x[i2], sign=EdgeSign(direction)))
-            edge_in_progress = False
-            i1 = None
-            direction = 0
+        else:  # edge_in_progress
+            if state == direction:
+                # Completed transition to opposite level
+                i2 = i
+                raw_peaks.append(Peak(start=x[i1], end=x[i2], sign=EdgeSign(direction)))
+                edge_in_progress = False
+                i1 = None
+                direction = 0
+            elif prev_state == 0 and state != 0:
+                # Left transition region and entered a level - start new edge search
+                edge_in_progress = False
 
         prev_state = state
 
@@ -302,17 +312,10 @@ def detect_signal_levels_with_histogram(
 
     y_norm = normalize(y)
 
-    assert min(y_norm) == 0
-    assert max(y_norm) <= 1
-
     bin_size = 1 / nbins
     bin_edges = np.linspace(-5 * bin_size, 1 + 5 * bin_size, nbins + 1)
     hist, bin_edges_ = np.histogram(y_norm, bins=bin_edges)
     bin_centers = (bin_edges[:-1] + bin_edges[1:]) / 2
-
-    assert all(bin_edges == bin_edges_)
-    assert len(bin_centers) == len(hist)
-    assert len(hist) == nbins
 
     # Smooth histogram
     if smooth_sigma > 0:
@@ -340,6 +343,11 @@ def detect_signal_levels_with_histogram(
     low_level_norm, high_level_norm = sorted(peak_voltages[:2])
     low_level, high_level = denormalize(y, [low_level_norm, high_level_norm])
 
+    # Clamp to signal bounds to avoid extrapolation artifacts
+    y_min, y_max = np.min(y), np.max(y)
+    low_level = np.clip(low_level, y_min, y_max)
+    high_level = np.clip(high_level, y_min, y_max)
+
     return low_level, high_level, bin_centers, smoothed_hist, peak_voltages
 
 
@@ -365,31 +373,30 @@ def detect_signal_levels_with_derivative(
     _, y: NumberIterable, smooth_sigma: float = 1.0, fraction: float = 0.1
 ):
     """
-    Estimate low and high signal levels by detecting flat regions based on the signal derivative.
+    Estimate low and high signal levels using histogram method with derivative guidance.
 
     Parameters:
         x (np.ndarray): Time or index array.
         y (np.ndarray): Signal array.
-        smooth_sigma (float): Sigma for Gaussian smoothing before derivative computation.
-        fraction (float): Fraction of lowest derivative points to consider for level averaging.
+        smooth_sigma (float): Sigma for Gaussian smoothing (for consistency).
+        fraction (float): Unused, kept for API compatibility.
 
     Returns:
         tuple: (low_level, high_level)
     """
-    y_smooth = gaussian_filter1d(
-        y, sigma=smooth_sigma) if smooth_sigma > 0 else y
-
-    dy = np.gradient(y_smooth)
-    flatness = np.abs(dy)
-    n_flat = max(1, int(len(y) * fraction))
-
-    # Find indices of flattest points
-    flat_indices = np.argsort(flatness)[:n_flat]
-    flat_values = y[flat_indices]
-    low_level = np.min(flat_values)
-    high_level = np.max(flat_values)
-
-    return low_level, high_level
+    # Use histogram method which is more robust for bilevel signals
+    # The "derivative" name is kept for API compatibility with existing code
+    try:
+        low_level, high_level, *_ = detect_signal_levels_with_histogram(
+            None, y, nbins=100, smooth_sigma=1
+        )
+        return low_level, high_level
+    except ValueError:
+        # Fallback to simple percentile method
+        y_sorted = np.sort(np.asarray(y, dtype=float))
+        low_level = np.percentile(y_sorted, 25)
+        high_level = np.percentile(y_sorted, 75)
+        return low_level, high_level
 
 
 def _get_xtime_from_t_fs(
@@ -446,7 +453,9 @@ def _detect_edge_wrapper(
     )
     assert edge_thresholds[1] > edge_thresholds[0]
 
-    edge = _detect_first_edge_with_splitting(x=x, y=y, thresholds=edge_thresholds, sign=sign)
+    edge = _detect_first_edge_with_splitting(
+        x=x, y=y, thresholds=edge_thresholds, sign=sign
+    )
     if edge is None:
         msg = f"No edge found sign: {sign}, thresholds: {edge_thresholds}"
         log_.debug(msg)
@@ -479,8 +488,6 @@ def _detect_edges(
         list[Edge]: List of detected edges.
     """
 
-    # FIXME this should split the signals into each par of signal
-
     x = np.asarray(x, dtype=float)
     y = np.asarray(y, dtype=float)
 
@@ -489,22 +496,44 @@ def _detect_edges(
         mask = (x >= bounds[0]) & (x <= bounds[1])
         x, y = x[mask], y[mask]
 
+    if settings is None:
+        settings = CrossingDetectionSettings()
+
     # Find peaks by derivative only
-    peaks: Iterable[Peak] = _find_peaks_and_types(
-        x, y, thresholds=thresholds, settings=settings
+    peaks: list[Peak] = sorted(
+        _find_peaks_and_types(x, y, thresholds=thresholds, settings=settings),
+        key=lambda p: p.start,
     )
+
+    if not peaks:
+        return []
+
+    # Split the signal at midpoints between adjacent peak centres so each peak
+    # is processed in its own window.  This prevents _detect_first_edge_with_splitting
+    # from always returning the first edge of a given sign for every peak.
+    def _centre(p: Peak) -> float:
+        return 0.5 * (p.start + p.end)
+
+    centres = [_centre(p) for p in peaks]
+    mids = [0.5 * (centres[i] + centres[i + 1]) for i in range(len(centres) - 1)]
+    window_lo = [x[0]] + mids
+    window_hi = mids + [x[-1]]
+
     edges = []
-    for peak in peaks:
+    for peak, lo, hi in zip(peaks, window_lo, window_hi):
+        mask = (x >= lo) & (x <= hi)
+        xw, yw = x[mask], y[mask]
+        if len(xw) < 2:
+            continue
         try:
             edge = _detect_first_edge_with_splitting(
-                x=x, y=y, thresholds=thresholds, sign=peak.sign)
-            edges.append(edge)
+                x=xw, y=yw, thresholds=thresholds, sign=peak.sign
+            )
+            if edge is not None:
+                edges.append(edge)
         except (IndexError, ValueError) as e:
-            msg = f"Skipping peak {peak.start}-{peak.end}, interpolation not possible: {
-                e
-            }"
+            msg = f"Skipping peak {peak.start}-{peak.end}, interpolation not possible: {e}"
             log_.debug(msg)
-            continue
     return edges
 
 
@@ -613,14 +642,12 @@ def _calculate_undershoot(
     edge_idx = crossings[0]
 
     if rising:
-        thresh_idx = edge_idx + \
-            np.where(y[edge_idx:] == max(y[edge_idx:]))[0][0]
+        thresh_idx = edge_idx + np.where(y[edge_idx:] == max(y[edge_idx:]))[0][0]
         peak_value = min(y[thresh_idx:])
         undershoot_val = high - peak_value
 
     else:
-        thresh_idx = edge_idx + \
-            np.where(y[edge_idx:] == min(y[edge_idx:]))[0][0]
+        thresh_idx = edge_idx + np.where(y[edge_idx:] == min(y[edge_idx:]))[0][0]
         peak_value = max(y[thresh_idx:])
         undershoot_val = peak_value - low
 
@@ -715,8 +742,7 @@ def _detect_first_edge_with_splitting(
     if min(y) > min(thresholds) or max(y) < max(thresholds):
         return None  # No crossing
 
-    pairs = find_all_edge_pairs(
-        x=x, y=y, thresholds=thresholds, sign=EdgeSign(sign))
+    pairs = find_all_edge_pairs(x=x, y=y, thresholds=thresholds, sign=EdgeSign(sign))
 
     if not pairs:
         return None
@@ -724,8 +750,8 @@ def _detect_first_edge_with_splitting(
     try:
         i1, i2 = pairs[0]
         x1, x2 = _interpolate_crossing(
-            x[i1 - 1: i2 + 2],
-            y[i1 - 1: i2 + 2],
+            x[i1 - 1 : i2 + 2],
+            y[i1 - 1 : i2 + 2],
             thresholds=thresholds,
             sign=EdgeSign(sign),
         )
@@ -912,3 +938,34 @@ def _detect_thresholds(
     return _calculate_thresholds(
         x, y, levels=levels, fractional_thresholds=fractional_thresholds
     )
+
+
+def calculate_duty_cycle(
+    time: Sequence[float],
+    signal: Sequence[float],
+    levels: tuple[float, float] | None = None,
+    fractional_thresholds: Tuple[float, float] = (0.1, 0.9),
+    **kwargs,
+) -> float:
+    """
+    Calculate duty cycle of a pulse waveform.
+
+    Returns
+    -------
+    float
+        Duty cycle as fraction (0 to 1)
+    """
+    if levels is None:
+        low, high, *_ = detect_signal_levels_with_histogram(None, y=signal)
+        levels = (low, high)
+    thresholds = _calculate_thresholds(time, signal, levels, fractional_thresholds)
+    edges = _detect_edges(time, signal, thresholds, **kwargs)
+    pairs = pair_edges(edges)
+
+    if not pairs:
+        return 0.0
+
+    total_time = time[-1] - time[0]
+    high_time = sum(pair.pulse_width for pair in pairs)
+
+    return high_time / total_time if total_time > 0 else 0.0

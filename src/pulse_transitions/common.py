@@ -85,7 +85,7 @@ class PairedEdge(BaseModel):
 
     @property
     def amplitude(self) -> float:
-        return self.rise.ymax - self.fall.ymin
+        return self.rise.ymax - self.rise.ymin
 
     @property
     def is_valid(self) -> bool:

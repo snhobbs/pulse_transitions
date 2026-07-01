@@ -31,7 +31,7 @@ def detect_edges(
     fractional_thresholds: Tuple[float, float] = (0.1, 0.9),
     levels: Optional[Tuple[float, float]] = None,
     *,
-    bounds=None,
+    bounds=Optional[None],
     settings: Optional[CrossingDetectionSettings] = None,
     **kwargs,
 ) -> list[Edge]:
@@ -298,6 +298,45 @@ def calculate_settling_time(
         settling_time_fraction=settling_time_fraction,
         levels=levels,
     )
+
+
+def calculate_flatness(
+    x: NumberIterable,
+    y: NumberIterable,
+    bounds: Tuple[float, float],
+    normalize: bool = True,
+) -> Optional[float]:
+    """
+    Measure signal flatness (normalised std-dev) within a time window.
+
+    Useful for quantifying ripple on a TDR plateau — a perfectly flat plateau
+    returns 0; impedance discontinuities that haven't fully settled return a
+    larger value.
+
+    Args:
+        x: Time array (any consistent units).
+        y: Signal array.
+        bounds: (t_start, t_end) window to measure.
+        normalize: If True, divide std-dev by |mean of the last 10 samples|
+            so the result is dimensionless (fraction of final level).
+            If False, return raw std-dev in signal units.
+
+    Returns:
+        Normalised std-dev within the window, or None if the window contains
+        fewer than 5 samples or the final level is too small to normalise.
+    """
+    x = np.asarray(x)
+    y = np.asarray(y)
+    mask = (x >= bounds[0]) & (x <= bounds[1])
+    if mask.sum() < 5:
+        return None
+    std = float(np.std(y[mask]))
+    if not normalize:
+        return std
+    v_final = float(np.abs(np.mean(y[-10:])))
+    if v_final < 1e-12:
+        return None
+    return std / v_final
 
 
 def get_edge_metrics(

@@ -1,4 +1,5 @@
 from .transient_response import calculate_falltime
+from .transient_response import calculate_flatness
 from .transient_response import calculate_midcross
 from .transient_response import calculate_overshoot
 from .transient_response import calculate_risetime
@@ -14,6 +15,7 @@ __all__ = (
     #"matpulse",  # Matlab like interface
     "get_edge_metrics",
     "calculate_falltime",
+    "calculate_flatness",
     "calculate_midcross",
     "calculate_overshoot",
     "calculate_risetime",
