@@ -31,7 +31,7 @@ def detect_edges(
     fractional_thresholds: Tuple[float, float] = (0.1, 0.9),
     levels: Optional[Tuple[float, float]] = None,
     *,
-    bounds=Optional[None],
+    bounds: Optional[Tuple[float, float]] = None,
     settings: Optional[CrossingDetectionSettings] = None,
     **kwargs,
 ) -> list[Edge]:
@@ -52,11 +52,12 @@ def detect_edges(
     Returns:
         list[Edge]: List of detected edges.
     """
-    if levels is None:
-        low_level, high_level, *_ = impl.detect_signal_levels_with_histogram(
-            None, y=y, **kwargs
-        )
-        levels = (low_level, high_level)
+    if levels is None and bounds is not None:
+        # the levels of the part being analysed, not of the whole signal
+        x_all, y_all = np.asarray(x, dtype=float), np.asarray(y, dtype=float)
+        inside = (x_all >= bounds[0]) & (x_all <= bounds[1])
+        levels = impl._levels_or_detected(y_all[inside], None, kwargs)
+    levels = impl._levels_or_detected(y, levels, kwargs)
 
     absolute_thresholds = impl._calculate_thresholds(
         x, y, levels, fractional_thresholds=fractional_thresholds
@@ -64,7 +65,7 @@ def detect_edges(
     if not settings:
         settings = CrossingDetectionSettings()
     return impl._detect_edges(
-        x=x, y=y, thresholds=absolute_thresholds, settings=settings
+        x=x, y=y, thresholds=absolute_thresholds, bounds=bounds, settings=settings
     )
 
 
@@ -192,11 +193,7 @@ def calculate_midcross(
         float: Time of mid-reference crossing.
     """
 
-    if not levels:
-        low_level, high_level, *_ = impl.detect_signal_levels_with_histogram(
-            None, y=y, **kwargs
-        )
-        levels = (low_level, high_level)
+    levels = impl._levels_or_detected(y, levels, kwargs)
 
     return impl._calculate_midcross(x=x, y=y, levels=levels)
 
@@ -216,11 +213,7 @@ def calculate_overshoot(
         tuple[int, float]: Index, Overshoot fraction.
     """
 
-    if not levels:
-        low_level, high_level, *_ = impl.detect_signal_levels_with_histogram(
-            None, y=y, **kwargs
-        )
-        levels = (low_level, high_level)
+    levels = impl._levels_or_detected(y, levels, kwargs)
 
     return impl._calculate_overshoot(y=y, levels=levels)
 
@@ -239,16 +232,12 @@ def calculate_undershoot(
         tuple[int, float]: Index, Undershoot fraction.
     """
 
-    if not levels:
-        low_level, high_level, *_ = impl.detect_signal_levels_with_histogram(
-            None, y=y, **kwargs
-        )
-        levels = (low_level, high_level)
+    levels = impl._levels_or_detected(y, levels, kwargs)
 
     return impl._calculate_undershoot(y=y, levels=levels)
 
 
-def calculate_slew_rate(x: NumberIterable, y: NumberIterable, **kwargs):
+def calculate_slew_rate(x: NumberIterable, y: NumberIterable):
     """
     Calculate the slew rate of a signal y with respect to x.
 
@@ -285,11 +274,7 @@ def calculate_settling_time(
         float: Settling time in units of t (or samples if t is None).
     """
 
-    if levels is None:
-        low_level, high_level, *_ = impl.detect_signal_levels_with_histogram(
-            None, y=y, **kwargs
-        )
-        levels = (low_level, high_level)
+    levels = impl._levels_or_detected(y, levels, kwargs)
 
     return impl._calculate_settling_time(
         y=y,
@@ -347,11 +332,7 @@ def get_edge_metrics(
     fractional_thresholds: Tuple[float, float] = (0.1, 0.9),
     **kwargs,
 ) -> EdgeMetrics:
-    if levels is None:
-        low_level, high_level, *_ = impl.detect_signal_levels_with_histogram(
-            None, y=y, **kwargs
-        )
-        levels = (low_level, high_level)
+    levels = impl._levels_or_detected(y, levels, kwargs)
 
     thresholds = impl._calculate_thresholds(
         x, y, levels, fractional_thresholds=fractional_thresholds

@@ -3,6 +3,11 @@ from enum import Enum
 from typing import Tuple, Optional
 
 
+class EdgeNotFound(IndexError, ValueError):
+    """There is no measurable edge where one was asked for; the message says what was missing.
+    An IndexError and a ValueError both, as the code it replaces raised either."""
+
+
 class EdgeSign(Enum):
     falling = -1
     rising = 1
@@ -67,6 +72,20 @@ class Edge:
     @property
     def bound_high(self) -> Tuple[float, float]:
         return (max([self.end, self.start]), max(self.thresholds))
+
+
+@dataclass
+class EdgeMeasurement:
+    """One edge and the levels it was measured between: `levels` is (bottom, top) whichever way the edge goes.
+    `edge.start` and `edge.end` are the times of the first and the last threshold crossing, so a falling edge
+    crosses its high threshold at `start`."""
+
+    edge: Edge
+    levels: Tuple[float, float]
+
+    @property
+    def duration(self) -> float:
+        return self.edge.dx
 
 
 @dataclass

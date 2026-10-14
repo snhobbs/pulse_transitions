@@ -20,6 +20,7 @@ from scipy.ndimage import gaussian_filter1d
 
 from .common import CrossingDetectionSettings
 from .common import Edge
+from .common import EdgeNotFound
 from .common import EdgeSign
 from .common import PairedEdge
 from .common import Peak
@@ -168,7 +169,9 @@ def _interpolate_crossing(
         post_mask = y >= hi_val
     else:
         # falling edge
-        assert sign == EdgeSign.falling
+        if sign != EdgeSign.falling:
+            msg = f"Edge sign must be rising or falling, not {sign}"
+            raise ValueError(msg)
         pre_mask = y >= hi_val
         post_mask = y <= lo_val
 
@@ -180,14 +183,14 @@ def _interpolate_crossing(
 
     if len(i1_candidates) == 0 or len(i2_candidates) == 0:
         msg = "Edge doesn't cross thresholds"
-        raise IndexError(msg)
+        raise EdgeNotFound(msg)
 
     i1 = i1_candidates[-1]  # + i1_range.start
     i2 = i2_candidates[0]  # + i2_range.start
 
     if i1 + 1 >= n or i2 >= n or i2 < 1:
         msg = "Edge interpolation range out of bounds"
-        raise IndexError(msg)
+        raise EdgeNotFound(msg)
 
     # i1 is the last sample on the "pre" side of the edge start threshold.
     # i2 is the first sample on the "post" side of the edge end threshold.
@@ -399,6 +402,23 @@ def detect_signal_levels_with_derivative(
         return low_level, high_level
 
 
+def _levels_or_detected(y: NumberIterable, levels, level_options: dict):
+    """`levels` when given, else the levels found from a histogram of `y`, using `level_options`
+    (nbins, smooth_sigma). Options with explicit levels would be ignored, so they are an error:
+    that is how a misspelt keyword (thresholds for fractional_thresholds) goes unnoticed."""
+    if levels is None:
+        low_level, high_level, *_ = detect_signal_levels_with_histogram(
+            None, y=y, **level_options
+        )
+        levels = low_level, high_level
+        msg = f"Detected levels: {levels}"
+        log_.debug(msg)
+    elif level_options:
+        msg = f"Unexpected keyword argument(s) {sorted(level_options)}: unused when levels are given"
+        raise TypeError(msg)
+    return levels
+
+
 def _get_xtime_from_t_fs(
     x: NumberIterable, fs: float = 1, t: Optional[NumberIterable] = None
 ):
@@ -437,21 +457,19 @@ def _detect_edge_wrapper(
     settings: Optional[CrossingDetectionSettings] = None,
     **kwargs,
 ) -> Optional[Edge]:
-    if not levels:
-        low_level, high_level, *_ = detect_signal_levels_with_histogram(
-            None, y=y, **kwargs
-        )
-        levels = low_level, high_level
-        msg = f"Detected levels: {levels}"
-        log_.debug(msg)
+    levels = _levels_or_detected(y, levels, kwargs)
 
     level_diff = max(levels) - min(levels)
-    assert level_diff >= 0
     edge_thresholds = (
         min(levels) + level_diff * min(fractional_thresholds),
         min(levels) + level_diff * max(fractional_thresholds),
     )
-    assert edge_thresholds[1] > edge_thresholds[0]
+    if not edge_thresholds[1] > edge_thresholds[0]:
+        msg = (
+            f"The thresholds {edge_thresholds} do not span a range: the levels {levels} "
+            f"or the fractional thresholds {fractional_thresholds} are equal"
+        )
+        raise ValueError(msg)
 
     edge = _detect_first_edge_with_splitting(
         x=x, y=y, thresholds=edge_thresholds, sign=sign
@@ -561,7 +579,9 @@ def _calculate_thresholds(
 
     low, high = levels
     diff = high - low
-    assert diff >= 0
+    if diff < 0:
+        msg = f"Levels must be (low, high), not {levels}"
+        raise ValueError(msg)
 
     thresholds = (
         low + min(fractional_thresholds) * diff,

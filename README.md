@@ -46,12 +46,38 @@ levels = detect_signal_levels(x=t, y=y, method="histogram")
 low, high = levels
 
 # Detect edges
-edge = detect_edges(t, y, levels=levels, thresholds=threshold_fractions)[0]
+edge = detect_edges(t, y, levels=levels, fractional_thresholds=threshold_fractions)[0]
 
 # Compute overshoot / undershoot
-metrics = get_edge_metrics(x=t, y=y, thresholds=threshold_fractions, levels=levels)
+metrics = get_edge_metrics(x=t, y=y, fractional_thresholds=threshold_fractions, levels=levels)
 ```
 
+
+## Measuring one edge of a signal that has several
+
+A trace that steps through several levels (a TDR trace has a new level after every discontinuity) has no single
+pair of levels. `measure_edge` takes the edge nearest a place you give, rising or falling, and measures it between
+the flat parts either side of it (or levels you pass):
+
+```python
+from pulse_transitions import EdgeNotFound, measure_edge
+
+try:
+    measured = measure_edge(t, y, around=2.5, max_distance=0.2, fractional_thresholds=(0.2, 0.8))
+except EdgeNotFound as error:  # also an IndexError and a ValueError
+    print(error)
+else:
+    bottom, top = measured.levels
+    print(measured.edge.start, measured.edge.end, measured.duration)
+```
+
+`Edge.start` and `Edge.end` are the first and the last threshold crossing in time order, so a falling edge
+crosses its high threshold at `start`.
+
+## Errors
+
+Unknown keyword arguments raise `TypeError` rather than being ignored (`thresholds=` is `fractional_thresholds=`).
+Functions that look for an edge return `[]` or `None` when there is none; `measure_edge` raises `EdgeNotFound`.
 
 ## Installation
 ### pypi

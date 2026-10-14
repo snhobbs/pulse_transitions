@@ -102,10 +102,10 @@ levels = detect_signal_levels(x=t, y=y, method="histogram")
 low, high = levels
 
 # Detect edges
-edge = detect_edges(t, y, levels=levels, thresholds=threshold_fractions)[0]
+edge = detect_edges(t, y, levels=levels, fractional_thresholds=threshold_fractions)[0]
 
 # Compute overshoot / undershoot
-metrics = get_edge_metrics(x=t, y=y, thresholds=threshold_fractions, levels=levels)
+metrics = get_edge_metrics(x=t, y=y, fractional_thresholds=threshold_fractions, levels=levels)
 
 fig, ax = make_annotations_plot(t, y, edge, metrics)
 fig.savefig("second-order-annotations.png", dpi=300)
