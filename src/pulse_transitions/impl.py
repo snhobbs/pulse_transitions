@@ -5,13 +5,13 @@ fractional_thresholds -> (0.1, 0.9) of signal etc
 """
 
 import enum
-from typing import List, Tuple
 import logging
 from collections.abc import Iterable
 from typing import List
 from typing import Optional
+from typing import Sequence
 from typing import Tuple
-from typing import Union, Sequence
+from typing import Union
 
 import numpy as np
 import scipy.signal
@@ -20,13 +20,27 @@ from scipy.ndimage import gaussian_filter1d
 
 from .common import CrossingDetectionSettings
 from .common import Edge
-from .common import EdgeNotFound
+from .common import EdgeNotFoundError
 from .common import EdgeSign
 from .common import PairedEdge
 from .common import Peak
 
 NumberIterable = Union[np.ndarray, List[Union[int, float]]]
 log_ = logging.getLogger("pulse_transitions")
+
+# Finding and measuring one edge of a signal with several (_measure_edge)
+_SMOOTH_SAMPLES = 5  # the span the slope is read over, so noise does not make an edge
+_MIN_EDGE_SNR = 8.0  # an edge is at least this many times the noise in the slope...
+_MIN_EDGE_FRACTION = (
+    0.1  # ...and at least this part of the steepest slope in the signal
+)
+_LEVEL_SAMPLES = 40  # the flat parts either side of an edge give its levels, from this many samples next to it
+_MIN_LEVEL_SAMPLES = 3
+_EDGE_MERGE_SAMPLES = 2  # runs of steep slope closer together than this are one edge
+_MAD_TO_SIGMA = (
+    1.4826  # median absolute deviation of normal noise to its standard deviation
+)
+_MIN_SAMPLES = 4 * _SMOOTH_SAMPLES
 
 
 def closest_index(arr: np.ndarray, value: float) -> int:
@@ -109,7 +123,8 @@ def find_all_edge_pairs(
         pre_mask = y >= hi_val
         post_mask = y <= lo_val
     else:
-        raise ValueError(f"Invalid EdgeSign: {sign}")
+        msg = f"Invalid EdgeSign: {sign}"
+        raise ValueError(msg)
 
     pairs = []
     i_pre = 0
@@ -122,16 +137,14 @@ def find_all_edge_pairs(
 
     state = State.waiting_pre
 
-    for idx, (pre, post) in enumerate(zip(pre_mask, post_mask)):
+    for idx, (pre, post) in enumerate(zip(pre_mask, post_mask, strict=False)):
         if pre and state == State.waiting_pre and (i_pre + min_spacing) <= idx:
             state = State.in_pre
         elif post and state == State.in_pre:
             i_post = idx
             pairs.append((i_pre, i_post))
             state = State.in_post
-        elif pre and state == State.in_post:
-            state = State.in_pre
-        elif pre and state == State.waiting_pre:
+        elif pre and state == State.in_post or pre and state == State.waiting_pre:
             state = State.in_pre
         elif post and state == State.waiting_pre:
             state = State.in_post
@@ -183,14 +196,14 @@ def _interpolate_crossing(
 
     if len(i1_candidates) == 0 or len(i2_candidates) == 0:
         msg = "Edge doesn't cross thresholds"
-        raise EdgeNotFound(msg)
+        raise EdgeNotFoundError(msg)
 
     i1 = i1_candidates[-1]  # + i1_range.start
     i2 = i2_candidates[0]  # + i2_range.start
 
     if i1 + 1 >= n or i2 >= n or i2 < 1:
         msg = "Edge interpolation range out of bounds"
-        raise EdgeNotFound(msg)
+        raise EdgeNotFoundError(msg)
 
     # i1 is the last sample on the "pre" side of the edge start threshold.
     # i2 is the first sample on the "post" side of the edge end threshold.
@@ -203,10 +216,18 @@ def _interpolate_crossing(
         start_thresh, end_thresh = hi_val, lo_val
 
     dy_start = y[i1 + 1] - y[i1]
-    x_start = x[i1] + (start_thresh - y[i1]) / dy_start * (x[i1 + 1] - x[i1]) if dy_start != 0 else x[i1]
+    x_start = (
+        x[i1] + (start_thresh - y[i1]) / dy_start * (x[i1 + 1] - x[i1])
+        if dy_start != 0
+        else x[i1]
+    )
 
     dy_end = y[i2] - y[i2 - 1]
-    x_end = x[i2 - 1] + (end_thresh - y[i2 - 1]) / dy_end * (x[i2] - x[i2 - 1]) if dy_end != 0 else x[i2]
+    x_end = (
+        x[i2 - 1] + (end_thresh - y[i2 - 1]) / dy_end * (x[i2] - x[i2 - 1])
+        if dy_end != 0
+        else x[i2]
+    )
 
     return (x_start, x_end)
 
@@ -273,22 +294,21 @@ def _find_peaks_and_types(
                 i1 = i
                 direction = -prev_state
                 edge_in_progress = True
-            elif prev_state != 0 and state != 0 and prev_state != state:
+            elif prev_state not in (0, state):
                 # Direct transition from one level to another (no pass through 0)
                 # Record this as an edge
                 raw_peaks.append(Peak(start=x[i], end=x[i], sign=EdgeSign(-prev_state)))
 
-        else:  # edge_in_progress
-            if state == direction:
-                # Completed transition to opposite level
-                i2 = i
-                raw_peaks.append(Peak(start=x[i1], end=x[i2], sign=EdgeSign(direction)))
-                edge_in_progress = False
-                i1 = None
-                direction = 0
-            elif prev_state == 0 and state != 0:
-                # Left transition region and entered a level - start new edge search
-                edge_in_progress = False
+        elif state == direction:
+            # Completed transition to opposite level
+            i2 = i
+            raw_peaks.append(Peak(start=x[i1], end=x[i2], sign=EdgeSign(direction)))
+            edge_in_progress = False
+            i1 = None
+            direction = 0
+        elif prev_state == 0 and state != 0:
+            # Left transition region and entered a level - start new edge search
+            edge_in_progress = False
 
         prev_state = state
 
@@ -393,13 +413,12 @@ def detect_signal_levels_with_derivative(
         low_level, high_level, *_ = detect_signal_levels_with_histogram(
             None, y, nbins=100, smooth_sigma=1
         )
-        return low_level, high_level
     except ValueError:
         # Fallback to simple percentile method
         y_sorted = np.sort(np.asarray(y, dtype=float))
         low_level = np.percentile(y_sorted, 25)
         high_level = np.percentile(y_sorted, 75)
-        return low_level, high_level
+    return low_level, high_level
 
 
 def _levels_or_detected(y: NumberIterable, levels, level_options: dict):
@@ -538,7 +557,7 @@ def _detect_edges(
     window_hi = mids + [x[-1]]
 
     edges = []
-    for peak, lo, hi in zip(peaks, window_lo, window_hi):
+    for peak, lo, hi in zip(peaks, window_lo, window_hi, strict=False):
         mask = (x >= lo) & (x <= hi)
         xw, yw = x[mask], y[mask]
         if len(xw) < 2:
@@ -583,12 +602,10 @@ def _calculate_thresholds(
         msg = f"Levels must be (low, high), not {levels}"
         raise ValueError(msg)
 
-    thresholds = (
+    return (
         low + min(fractional_thresholds) * diff,
         low + max(fractional_thresholds) * diff,
     )
-
-    return thresholds
 
 
 def _calculate_overshoot(
@@ -989,3 +1006,126 @@ def calculate_duty_cycle(
     high_time = sum(pair.pulse_width for pair in pairs)
 
     return high_time / total_time if total_time > 0 else 0.0
+
+
+def _find_edge_runs(y: np.ndarray) -> list[Tuple[int, int, float]]:
+    """The edges of a signal as (first sample, last sample, direction): runs of steep slope,
+    rising +1 or falling -1."""
+    span = _SMOOTH_SAMPLES
+    # smoothed[i] is the change from sample i to i + span
+    smoothed = y[span:] - y[:-span]
+    steepest = float(np.max(np.abs(smoothed)))
+    if steepest <= 0.0:
+        return []
+    noise = _MAD_TO_SIGMA * float(np.median(np.abs(smoothed - np.median(smoothed))))
+    steep = np.abs(smoothed) >= max(
+        _MIN_EDGE_SNR * noise, _MIN_EDGE_FRACTION * steepest
+    )
+    runs: list[Tuple[int, int, float]] = []
+    start = None
+    for index in range(len(smoothed) + 1):
+        inside = (
+            index < len(smoothed)
+            and steep[index]
+            and (start is None or np.sign(smoothed[index]) == np.sign(smoothed[start]))
+        )
+        if inside and start is None:
+            start = index
+        elif not inside and start is not None:
+            runs.append((start, index - 1 + span, float(np.sign(smoothed[start]))))
+            start = index if index < len(smoothed) and steep[index] else None
+    merged: list[Tuple[int, int, float]] = []
+    for run in runs:
+        if (
+            merged
+            and run[2] == merged[-1][2]
+            and run[0] - merged[-1][1] <= _EDGE_MERGE_SAMPLES
+        ):
+            merged[-1] = (merged[-1][0], run[1], run[2])
+        else:
+            merged.append(run)
+    return merged
+
+
+def _flat_levels(
+    y: np.ndarray, lower: int, first: int, last: int, upper: int, direction: float
+) -> Tuple[float, float]:
+    """The (bottom, top) levels of the edge spanning samples first..last: the medians of the flat parts
+    before and after it, each between the edge and the neighbouring edge (`lower` and `upper`)."""
+    before = y[max(lower, first - _LEVEL_SAMPLES) : first]
+    after = y[last + 1 : min(upper, last + _LEVEL_SAMPLES) + 1]
+    if len(before) < _MIN_LEVEL_SAMPLES or len(after) < _MIN_LEVEL_SAMPLES:
+        msg = "This edge has no flat level on both sides to measure from."
+        raise EdgeNotFoundError(msg)
+    start_level, end_level = float(np.median(before)), float(np.median(after))
+    if (end_level - start_level) * direction <= 0:
+        msg = "This edge does not settle to a new level."
+        raise EdgeNotFoundError(msg)
+    return min(start_level, end_level), max(start_level, end_level)
+
+
+def _measure_edge(
+    x: NumberIterable,
+    y: NumberIterable,
+    around: float,
+    max_distance: float,
+    fractional_thresholds: Tuple[float, float],
+    levels: Optional[Tuple[float, float]],
+) -> Tuple[Edge, Tuple[float, float]]:
+    """The edge closest to `around`, and the (bottom, top) levels it was measured between: the flat parts
+    either side of it unless `levels` are given. Raises EdgeNotFoundError."""
+    x, y = np.asarray(x, dtype=float), np.asarray(y, dtype=float)
+    finite = np.isfinite(x) & np.isfinite(y)
+    xs, ys = x[finite], y[finite]
+    if len(ys) < _MIN_SAMPLES:
+        msg = "There is no trace to measure."
+        raise EdgeNotFoundError(msg)
+    runs = _find_edge_runs(ys)
+    if not runs:
+        msg = "There is no edge in this trace."
+        raise EdgeNotFoundError(msg)
+
+    def distance(run: Tuple[int, int, float]) -> float:
+        first, last = float(xs[run[0]]), float(xs[min(run[1], len(xs) - 1)])
+        if first <= around <= last:
+            return 0.0
+        return min(abs(around - first), abs(around - last))
+
+    nearest = min(range(len(runs)), key=lambda i: distance(runs[i]))
+    if distance(runs[nearest]) > max_distance:
+        msg = "No edge near the pointer: point at an edge."
+        raise EdgeNotFoundError(msg)
+    first, last, direction = runs[nearest]
+    last = min(last, len(ys) - 1)
+    # the window ends where the neighbouring edges begin
+    lower = runs[nearest - 1][1] + 1 if nearest > 0 else 0
+    upper = runs[nearest + 1][0] - 1 if nearest + 1 < len(runs) else len(ys) - 1
+    if levels is None:
+        bottom, top = _flat_levels(ys, lower, first, last, upper, direction)
+    else:
+        bottom, top = min(levels), max(levels)
+    window = slice(lower, upper + 1)
+    thresholds = _calculate_thresholds(
+        xs[window],
+        ys[window],
+        (bottom, top),
+        fractional_thresholds=fractional_thresholds,
+    )
+    try:
+        found = _detect_edges(
+            x=xs[window],
+            y=ys[window],
+            thresholds=thresholds,
+            settings=CrossingDetectionSettings(),
+        )
+    except (IndexError, ValueError) as exc:
+        # a window that cannot be interpolated (EdgeNotFoundError is both)
+        msg = f"The reference levels are not crossed here ({exc})."
+        raise EdgeNotFoundError(msg) from exc
+    wanted = [edge for edge in found if (edge.sign.value > 0) == (direction > 0)]
+    if not wanted:
+        msg = "The edge does not cross the reference levels: check the top and bottom levels."
+        raise EdgeNotFoundError(msg)
+    centre = 0.5 * (float(xs[first]) + float(xs[last]))
+    edge = min(wanted, key=lambda e: abs(0.5 * (e.start + e.end) - centre))
+    return edge, (bottom, top)

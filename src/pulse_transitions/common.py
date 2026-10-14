@@ -1,9 +1,10 @@
 from dataclasses import dataclass
 from enum import Enum
-from typing import Tuple, Optional
+from typing import Optional
+from typing import Tuple
 
 
-class EdgeNotFound(IndexError, ValueError):
+class EdgeNotFoundError(IndexError, ValueError):
     """There is no measurable edge where one was asked for; the message says what was missing.
     An IndexError and a ValueError both, as the code it replaces raised either."""
 

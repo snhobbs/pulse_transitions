@@ -13,7 +13,9 @@ import numpy as np
 from . import impl
 from .common import CrossingDetectionSettings
 from .common import Edge
-from .common import EdgeSign, EdgeMetrics
+from .common import EdgeMeasurement
+from .common import EdgeMetrics
+from .common import EdgeSign
 
 Number = Union[float, int]
 NumberIterable = Iterable[Number]
@@ -67,6 +69,37 @@ def detect_edges(
     return impl._detect_edges(
         x=x, y=y, thresholds=absolute_thresholds, bounds=bounds, settings=settings
     )
+
+
+def measure_edge(
+    x: NumberIterable,
+    y: NumberIterable,
+    around: float,
+    max_distance: float = float("inf"),
+    fractional_thresholds: Tuple[float, float] = (0.1, 0.9),
+    levels: Optional[Tuple[float, float]] = None,
+) -> EdgeMeasurement:
+    """
+    The edge closest to `around` (a value of x), rising or falling, between the
+    reference levels `fractional_thresholds` (10-90 %, 20-80 %) of the way from its
+    bottom to its top level.
+
+    For a signal that steps through several levels (a TDR trace has a new level after
+    every discontinuity) the levels are the flat parts on either side of that edge,
+    unless `levels` (bottom, top) are given.
+
+    Raises:
+        EdgeNotFoundError: No edge within `max_distance` of `around`, the edge has no
+            flat part on a side to take a level from, or it does not cross the
+            reference levels.
+
+    Returns:
+        EdgeMeasurement: the Edge and the (bottom, top) levels it was measured between.
+    """
+    edge, edge_levels = impl._measure_edge(
+        x, y, around, max_distance, fractional_thresholds, levels
+    )
+    return EdgeMeasurement(edge=edge, levels=edge_levels)
 
 
 def get_rising_edge(
@@ -289,6 +322,7 @@ def calculate_flatness(
     x: NumberIterable,
     y: NumberIterable,
     bounds: Tuple[float, float],
+    *,
     normalize: bool = True,
 ) -> Optional[float]:
     """

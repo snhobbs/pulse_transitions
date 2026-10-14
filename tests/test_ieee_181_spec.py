@@ -31,6 +31,7 @@ from pulse_transitions.transient_response import (
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def make_trapezoidal_transition(t_start, t_end, s1, s2, n=1000, t_total=None):
     """Return (t, y) for a linear transition from s1 to s2."""
     t_total = t_total or t_end * 2
@@ -77,6 +78,7 @@ def make_trapezoidal_pulse(t1, t2, t3, t4, s1, s2, n=5000, t_total=1.0):
 # §5.2 — State Level Determination
 # ---------------------------------------------------------------------------
 
+
 class TestStateLevelDetermination:
     """§5.2 — State level must equal mode (or mean) of each histogram sub-band."""
 
@@ -119,16 +121,20 @@ class TestStateLevelDetermination:
 # §5.3.2 — Percent Reference Level
 # ---------------------------------------------------------------------------
 
+
 class TestPercentReferenceLevel:
     """§5.3.2 — y_x% = level(s1) + (A / 100) * x"""
 
-    @pytest.mark.parametrize("x_pct,expected_fraction", [
-        (0, 0.0),
-        (10, 0.1),
-        (50, 0.5),
-        (90, 0.9),
-        (100, 1.0),
-    ])
+    @pytest.mark.parametrize(
+        "x_pct,expected_fraction",
+        [
+            (0, 0.0),
+            (10, 0.1),
+            (50, 0.5),
+            (90, 0.9),
+            (100, 1.0),
+        ],
+    )
     def test_reference_level_formula(self, x_pct, expected_fraction):
         """y_x% must equal s1 + (A/100)*x for known s1, s2."""
         s1, s2 = 0.0, 10.0
@@ -171,6 +177,7 @@ class TestPercentReferenceLevel:
 # ---------------------------------------------------------------------------
 # §5.3.3 — Reference Level Instants (linear interpolation)
 # ---------------------------------------------------------------------------
+
 
 class TestReferenceLevelInstants:
     """§5.3.3 — Crossing instants found by linear interpolation between samples."""
@@ -238,6 +245,7 @@ class TestReferenceLevelInstants:
 # §5.3.4 — Transition Duration  (ta = |t_x1% − t_x2%|)
 # ---------------------------------------------------------------------------
 
+
 class TestTransitionDuration:
     """§5.3.4 — Default reference levels 10% and 90%."""
 
@@ -291,6 +299,7 @@ class TestTransitionDuration:
 # ---------------------------------------------------------------------------
 # §5.3.5 — Overshoot and Undershoot in Aberration Regions
 # ---------------------------------------------------------------------------
+
 
 class TestOvershootUndershoot:
     """§5.3.5 — O/U measured in pre/post aberration regions, not globally."""
@@ -360,6 +369,7 @@ class TestOvershootUndershoot:
 # §5.3.7 — Transition Settling Duration
 # ---------------------------------------------------------------------------
 
+
 class TestTransitionSettlingDuration:
     """§5.3.7 — Settling duration measured from 50% crossing instant."""
 
@@ -367,7 +377,9 @@ class TestTransitionSettlingDuration:
         """An ideal step with no ringing settles at the transition point."""
         t = np.linspace(0, 10, 5000)
         y = np.where(t < 1.0, 0.0, 1.0)
-        settling_t = _calculate_settling_time(t, y, (0.0, 1.0), settling_time_fraction=0.02)
+        settling_t = _calculate_settling_time(
+            t, y, (0.0, 1.0), settling_time_fraction=0.02
+        )
         assert settling_t == pytest.approx(1.0, abs=0.05)
 
     def test_ringing_delays_settling(self):
@@ -377,19 +389,27 @@ class TestTransitionSettlingDuration:
         y_ringing = y_clean.copy()
         # add ringing that decays over ~3s
         ring_mask = t >= 1.0
-        y_ringing[ring_mask] += 0.05 * np.exp(-1.5 * (t[ring_mask] - 1.0)) * np.sin(
-            20 * np.pi * (t[ring_mask] - 1.0)
+        y_ringing[ring_mask] += (
+            0.05
+            * np.exp(-1.5 * (t[ring_mask] - 1.0))
+            * np.sin(20 * np.pi * (t[ring_mask] - 1.0))
         )
 
-        settling_clean = _calculate_settling_time(t, y_clean, (0.0, 1.0), settling_time_fraction=0.02)
-        settling_ringing = _calculate_settling_time(t, y_ringing, (0.0, 1.0), settling_time_fraction=0.02)
+        settling_clean = _calculate_settling_time(
+            t, y_clean, (0.0, 1.0), settling_time_fraction=0.02
+        )
+        settling_ringing = _calculate_settling_time(
+            t, y_ringing, (0.0, 1.0), settling_time_fraction=0.02
+        )
         assert settling_ringing > settling_clean
 
     def test_settling_time_within_epoch(self):
         """Settling time must be within the waveform epoch."""
         t = np.linspace(0, 5, 2000)
         y = np.where(t < 1.0, 0.0, 1.0)
-        settling_t = _calculate_settling_time(t, y, (0.0, 1.0), settling_time_fraction=0.02)
+        settling_t = _calculate_settling_time(
+            t, y, (0.0, 1.0), settling_time_fraction=0.02
+        )
         assert t[0] <= settling_t <= t[-1]
 
     def test_settling_fraction_boundary(self):
@@ -399,14 +419,19 @@ class TestTransitionSettlingDuration:
         # Add small overshoot
         y[(t >= 1.0) & (t < 1.5)] = 1.05
 
-        st_tight = _calculate_settling_time(t, y, (0.0, 1.0), settling_time_fraction=0.01)
-        st_loose = _calculate_settling_time(t, y, (0.0, 1.0), settling_time_fraction=0.10)
+        st_tight = _calculate_settling_time(
+            t, y, (0.0, 1.0), settling_time_fraction=0.01
+        )
+        st_loose = _calculate_settling_time(
+            t, y, (0.0, 1.0), settling_time_fraction=0.10
+        )
         assert st_loose <= st_tight
 
 
 # ---------------------------------------------------------------------------
 # §5.4.1 — Pulse Duration Tₚ
 # ---------------------------------------------------------------------------
+
 
 class TestPulseDuration:
     """§5.4.1 — Tₚ = |t_2,50% − t_1,50%| (default x=50)."""
@@ -417,6 +442,7 @@ class TestPulseDuration:
         levels = (s1, s2)
         thresholds = _calculate_thresholds(t, y, levels)
         from pulse_transitions.common import CrossingDetectionSettings
+
         edges = _detect_edges(t, y, thresholds, settings=CrossingDetectionSettings())
         return t, y, edges
 
@@ -434,7 +460,9 @@ class TestPulseDuration:
         # pulse_width in PairedEdge uses fall.end - rise.start (10% to 10%)
         # This test verifies the measured duration is close to the true pulse width
         # The 50%-based duration is slightly shorter than 10%-to-10%
-        pulse_50 = _calculate_midcross(t, y[t >= 0.15], (0.0, 1.0))  # just check midcross exists
+        pulse_50 = _calculate_midcross(
+            t, y[t >= 0.15], (0.0, 1.0)
+        )  # just check midcross exists
         assert pair.pulse_width == pytest.approx(t2 - t1, abs=0.01)
 
     def test_pulse_duration_positive(self):
@@ -465,6 +493,7 @@ class TestPulseDuration:
 # §5.4.2 — Waveform Period T  and §5.4.3 — Pulse Separation Tₛ
 # ---------------------------------------------------------------------------
 
+
 class TestWaveformPeriodAndSeparation:
     """§5.4.2/§5.4.3 — T = Tₚ + Tₛ where Tₛ is the inter-pulse gap."""
 
@@ -489,7 +518,9 @@ class TestWaveformPeriodAndSeparation:
 
         # Pulse 2: rises at t=0.1+period
         rise2 = make_edge(0.1 + period, 0.1 + period + 0.001, EdgeSign.rising)
-        fall2 = make_edge(0.1 + period + Tp, 0.1 + period + Tp + 0.001, EdgeSign.falling)
+        fall2 = make_edge(
+            0.1 + period + Tp, 0.1 + period + Tp + 0.001, EdgeSign.falling
+        )
 
         return (
             PairedEdge(rise=rise1, fall=fall1),
@@ -546,6 +577,7 @@ class TestWaveformPeriodAndSeparation:
         levels = (s1, s2)
         thresholds = _calculate_thresholds(t, y, levels)
         from pulse_transitions.common import CrossingDetectionSettings
+
         edges = _detect_edges(t, y, thresholds, settings=CrossingDetectionSettings())
         pairs = pair_edges(edges)
         # Should find at least 2 complete rise/fall pairs
@@ -555,6 +587,7 @@ class TestWaveformPeriodAndSeparation:
 # ---------------------------------------------------------------------------
 # §5.4.4 — Duty Factor df = Tₚ / T
 # ---------------------------------------------------------------------------
+
 
 class TestDutyFactor:
     """§5.4.4 — df = Tₚ / T."""
@@ -578,6 +611,7 @@ class TestDutyFactor:
 # ---------------------------------------------------------------------------
 # §5.1 — Two-State Analysis: Amplitude definition
 # ---------------------------------------------------------------------------
+
 
 class TestWaveformAmplitude:
     """§5.3.1 — Signed amplitude A = level(s2) − level(s1)."""
@@ -607,6 +641,7 @@ class TestWaveformAmplitude:
 # §2 — Symbols: basic invariants
 # ---------------------------------------------------------------------------
 
+
 class TestSpecSymbolInvariants:
     """Verify that key spec symbols map to the correct quantities."""
 
@@ -624,8 +659,22 @@ class TestSpecSymbolInvariants:
 
     def test_paired_edge_pulse_width_positive(self):
         """PairedEdge.pulse_width must be positive."""
-        rise = Edge(start=1.0, end=1.1, sign=EdgeSign.rising, thresholds=(0.1, 0.9), ymin=0.0, ymax=1.0)
-        fall = Edge(start=2.0, end=2.1, sign=EdgeSign.falling, thresholds=(0.1, 0.9), ymin=0.0, ymax=1.0)
+        rise = Edge(
+            start=1.0,
+            end=1.1,
+            sign=EdgeSign.rising,
+            thresholds=(0.1, 0.9),
+            ymin=0.0,
+            ymax=1.0,
+        )
+        fall = Edge(
+            start=2.0,
+            end=2.1,
+            sign=EdgeSign.falling,
+            thresholds=(0.1, 0.9),
+            ymin=0.0,
+            ymax=1.0,
+        )
         pair = PairedEdge(rise=rise, fall=fall)
         assert pair.pulse_width > 0.0
 
@@ -647,7 +696,9 @@ class TestSpecSymbolInvariants:
         t, y = make_trapezoidal_transition(0.3, 0.7, s1, s2, n=2000)
 
         t_50 = _calculate_midcross(t, y, (s1, s2))
-        thresh_10_90 = _calculate_thresholds(t, y, (s1, s2), fractional_thresholds=(0.1, 0.9))
+        thresh_10_90 = _calculate_thresholds(
+            t, y, (s1, s2), fractional_thresholds=(0.1, 0.9)
+        )
         t_lo, t_hi = _interpolate_crossing(t, y, thresh_10_90, EdgeSign.rising)
 
         assert t_lo < t_50 < t_hi

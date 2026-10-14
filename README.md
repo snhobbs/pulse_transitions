@@ -60,11 +60,11 @@ pair of levels. `measure_edge` takes the edge nearest a place you give, rising o
 the flat parts either side of it (or levels you pass):
 
 ```python
-from pulse_transitions import EdgeNotFound, measure_edge
+from pulse_transitions import EdgeNotFoundError, measure_edge
 
 try:
     measured = measure_edge(t, y, around=2.5, max_distance=0.2, fractional_thresholds=(0.2, 0.8))
-except EdgeNotFound as error:  # also an IndexError and a ValueError
+except EdgeNotFoundError as error:  # also an IndexError and a ValueError
     print(error)
 else:
     bottom, top = measured.levels
@@ -77,7 +77,7 @@ crosses its high threshold at `start`.
 ## Errors
 
 Unknown keyword arguments raise `TypeError` rather than being ignored (`thresholds=` is `fractional_thresholds=`).
-Functions that look for an edge return `[]` or `None` when there is none; `measure_edge` raises `EdgeNotFound`.
+Functions that look for an edge return `[]` or `None` when there is none; `measure_edge` raises `EdgeNotFoundError`.
 
 ## Installation
 ### pypi

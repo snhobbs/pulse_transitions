@@ -53,8 +53,7 @@ class TestFindPeaksAndTypes(unittest.TestCase):
         y[40:60] = np.linspace(0.0, 1.0, 20)  # Rising slope
         y[60:] = 1.0
 
-        peaks = _find_peaks_and_types(
-            x, y, thresholds=[0.1, 0.9], settings=self.config)
+        peaks = _find_peaks_and_types(x, y, thresholds=[0.1, 0.9], settings=self.config)
 
         self.assertEqual(len(peaks), 1)
         self.assertEqual(peaks[0][1], "rise")
@@ -65,8 +64,7 @@ class TestFindPeaksAndTypes(unittest.TestCase):
         y[40:60] = np.linspace(1.0, 0.0, 20)  # Falling slope
         y[60:] = 0.0
 
-        peaks = _find_peaks_and_types(
-            x, y, thresholds=[0.1, 0.9], settings=self.config)
+        peaks = _find_peaks_and_types(x, y, thresholds=[0.1, 0.9], settings=self.config)
 
         self.assertEqual(len(peaks), 1)
         self.assertEqual(peaks[0][1], "fall")
@@ -82,8 +80,7 @@ class TestFindPeaksAndTypes(unittest.TestCase):
             ]
         )
 
-        peaks = _find_peaks_and_types(
-            x, y, thresholds=[0.2, 0.8], settings=self.config)
+        peaks = _find_peaks_and_types(x, y, thresholds=[0.2, 0.8], settings=self.config)
 
         self.assertEqual(len(peaks), 4)
         rise_count = sum(1 for _, typ, _ in peaks if typ == "rise")
@@ -99,8 +96,7 @@ class TestFindPeaksAndTypes(unittest.TestCase):
         y[40:60] = np.linspace(0.4, 0.5, 20)
         y[60:] = 0.5
 
-        peaks = _find_peaks_and_types(
-            x, y, thresholds=[0.1, 0.8], settings=self.config)
+        peaks = _find_peaks_and_types(x, y, thresholds=[0.1, 0.8], settings=self.config)
         self.assertEqual(len(peaks), 0)
 
     def test_small_window_misses_crossing(self):
@@ -112,13 +108,11 @@ class TestFindPeaksAndTypes(unittest.TestCase):
         # Window is too small to see full crossing
 
         config = CrossingDetectionSettings(window=2)
-        peaks = _find_peaks_and_types(
-            x, y, thresholds=[0.1, 0.9], settings=config)
+        peaks = _find_peaks_and_types(x, y, thresholds=[0.1, 0.9], settings=config)
         self.assertEqual(len(peaks), 0)
 
         # Window large enough to capture crossing
-        peaks = _find_peaks_and_types(
-            x, y, thresholds=[0.1, 0.9], settings=self.config)
+        peaks = _find_peaks_and_types(x, y, thresholds=[0.1, 0.9], settings=self.config)
         self.assertEqual(len(peaks), 1)
 
     def test_min_separation_filters_close_peaks(self):
@@ -130,8 +124,7 @@ class TestFindPeaksAndTypes(unittest.TestCase):
         y[50:] = 1.0
 
         config = CrossingDetectionSettings(window=10, min_separation=0.2)
-        peaks = _find_peaks_and_types(
-            x, y, thresholds=[0.1, 0.9], settings=config)
+        peaks = _find_peaks_and_types(x, y, thresholds=[0.1, 0.9], settings=config)
 
         # Expect only 1 rising edge due to min_separation filtering
         self.assertEqual(len(peaks), 1)
@@ -287,8 +280,7 @@ class TestSettlingTime(unittest.TestCase):
         t = np.linspace(0, 10, 1000)
         x = np.zeros_like(t)
         x[t >= 3] = 1
-        settling = settling_time(
-            x, d=0.05, fs=100, t=t, settling_time_margin=0.5)
+        settling = settling_time(x, d=0.05, fs=100, t=t, settling_time_margin=0.5)
         self.assertGreaterEqual(settling, 3)
         self.assertLessEqual(settling, 10.5)
 
@@ -301,25 +293,19 @@ class TestInterpolateCrossing(unittest.TestCase):
         thresholds = (1, 2)
 
         y = np.linspace(0, 3, len(self.x))
-        start, end = _interpolate_crossing(
-            self.x, y, thresholds, sign=EdgeSign.rising)
+        start, end = _interpolate_crossing(self.x, y, thresholds, sign=EdgeSign.rising)
         self.assertLess(start, end)
-        self.assertAlmostEqual(np.interp(start, self.x, y),
-                               min(thresholds), delta=1e-3)
-        self.assertAlmostEqual(np.interp(end, self.x, y),
-                               max(thresholds), delta=1e-3)
+        self.assertAlmostEqual(np.interp(start, self.x, y), min(thresholds), delta=1e-3)
+        self.assertAlmostEqual(np.interp(end, self.x, y), max(thresholds), delta=1e-3)
 
     def test_falling_edge_no_window(self):
         thresholds = (1, 2)
 
         y = np.linspace(3, 0, len(self.x))
-        start, end = _interpolate_crossing(
-            self.x, y, thresholds, sign=EdgeSign.falling)
+        start, end = _interpolate_crossing(self.x, y, thresholds, sign=EdgeSign.falling)
         self.assertLessEqual(start, end)
-        self.assertAlmostEqual(np.interp(start, self.x, y),
-                               max(thresholds), delta=1e-3)
-        self.assertAlmostEqual(np.interp(end, self.x, y),
-                               min(thresholds), delta=1e-3)
+        self.assertAlmostEqual(np.interp(start, self.x, y), max(thresholds), delta=1e-3)
+        self.assertAlmostEqual(np.interp(end, self.x, y), min(thresholds), delta=1e-3)
 
     def test_interpolate_crossing_multiple_edges(self):
         x = np.linspace(0, 1000, 1000)
@@ -336,8 +322,7 @@ class TestInterpolateCrossing(unittest.TestCase):
 
         # Having a rise and a fall will raise and IndexError. First split the signal up into chuncks
         with self.assertRaises(IndexError):
-            start, end = _interpolate_crossing(
-                x, y, thresholds, sign=EdgeSign.falling)
+            start, end = _interpolate_crossing(x, y, thresholds, sign=EdgeSign.falling)
 
 
 class EdgeFinding(TestCase):
@@ -397,7 +382,6 @@ class EdgeFinding(TestCase):
         self.assertIsInstance(edge, impl.Edge)
 
 
-
 class TestEdgeDetection(unittest.TestCase):
     def test_single_rising_edge(self):
         x = np.linspace(0, 10, 1000)
@@ -410,7 +394,7 @@ class TestEdgeDetection(unittest.TestCase):
 
         i1, i2 = pairs[0]
         x_cross_lo, x_cross_hi = _interpolate_crossing(
-            x[i1 - 1: i2 + 2], y[i1 - 1: i2 + 2], (0.3, 0.7), EdgeSign.rising
+            x[i1 - 1 : i2 + 2], y[i1 - 1 : i2 + 2], (0.3, 0.7), EdgeSign.rising
         )
 
         self.assertTrue(4.9 < x_cross_lo < 5.0)
@@ -429,8 +413,7 @@ class TestEdgeDetection(unittest.TestCase):
         # Check that all interpolated edges are in increasing x order
         edges = [
             _interpolate_crossing(
-                x[i1 - 1: i2 + 2], y[i1 - 1: i2 +
-                                     2], (0.3, 0.7), EdgeSign.rising
+                x[i1 - 1 : i2 + 2], y[i1 - 1 : i2 + 2], (0.3, 0.7), EdgeSign.rising
             )
             for i1, i2 in pairs
         ]
@@ -445,19 +428,17 @@ class TestEdgeDetection(unittest.TestCase):
 
         y = np.where(x < 5, 1, 0)  # single falling edge at x=5
 
-        pairs = impl.find_all_edge_pairs(
-            x, y, thresholds=thresholds, sign=edge_sign
-        )
+        pairs = impl.find_all_edge_pairs(x, y, thresholds=thresholds, sign=edge_sign)
         self.assertEqual(len(pairs), 1)
 
         i1, i2 = pairs[0]
         x_cross_lo, x_cross_hi = impl._interpolate_crossing(
-            x[i1 - 1: i2 + 2], y[i1 - 1: i2 + 2], thresholds, edge_sign
+            x[i1 - 1 : i2 + 2], y[i1 - 1 : i2 + 2], thresholds, edge_sign
         )
 
         print(x_cross_hi, x_cross_lo)
-        self.assertTrue(5.0-dx < x_cross_hi < 5.0+4*dx)
-        self.assertTrue(5.0-dx < x_cross_lo < 5.0+dx)  # lo/hi flipped for falling
+        self.assertTrue(5.0 - dx < x_cross_hi < 5.0 + 4 * dx)
+        self.assertTrue(5.0 - dx < x_cross_lo < 5.0 + dx)  # lo/hi flipped for falling
 
     def test_no_crossing(self):
         x = np.linspace(0, 10, 1000)

@@ -2,18 +2,17 @@ from .common import CrossingDetectionSettings
 from .common import Edge
 from .common import EdgeMeasurement
 from .common import EdgeMetrics
-from .common import EdgeNotFound
+from .common import EdgeNotFoundError
 from .common import EdgeSign
 from .common import PairedEdge
 from .impl import pair_edges
-from .measure import measure_edge
 from .transient_response import calculate_falltime
 from .transient_response import calculate_flatness
 from .transient_response import calculate_midcross
 from .transient_response import calculate_overshoot
+from .transient_response import calculate_risetime
 from .transient_response import calculate_settling_time
 from .transient_response import calculate_slew_rate
-from .transient_response import calculate_risetime
 from .transient_response import calculate_thresholds
 from .transient_response import calculate_undershoot
 from .transient_response import detect_edges
@@ -23,14 +22,15 @@ from .transient_response import detect_thresholds
 from .transient_response import get_edge_metrics
 from .transient_response import get_falling_edge
 from .transient_response import get_rising_edge
+from .transient_response import measure_edge
 
 __all__ = (
-    #"matpulse",  # Matlab like interface
+    # "matpulse",  # Matlab like interface
     "CrossingDetectionSettings",
     "Edge",
     "EdgeMeasurement",
     "EdgeMetrics",
-    "EdgeNotFound",
+    "EdgeNotFoundError",
     "EdgeSign",
     "PairedEdge",
     "get_edge_metrics",
@@ -50,4 +50,5 @@ __all__ = (
     "detect_thresholds",
     "detect_signal_levels",
     "detect_edges",
-    "detect_first_edge")
+    "detect_first_edge",
+)
