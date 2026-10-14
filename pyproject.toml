@@ -1,61 +1,55 @@
 [project]
-name='pulse_transitions'
-version="0.2.0"
-authors=[
-    {name="Simon Hobbs", email='simon.hobbs@electrooptical.net'}]
-requires-python='>=3.8'
-classifiers=[
-        'Development Status :: 2 - Pre-Alpha',
-        'Intended Audience :: Developers',
-        'Natural Language :: English',
-        'Programming Language :: Python :: 3',
-        'Programming Language :: Python :: 3.8',
-        'Programming Language :: Python :: 3.9',
-        'Programming Language :: Python :: 3.10',
-        'Programming Language :: Python :: 3.11',
-        'Programming Language :: Python :: 3.12',
-        'Programming Language :: Python :: 3.13',
+name = 'pulse_transitions'
+version = "0.2.0"
+authors = [{ name = "Simon Hobbs", email = 'simon.hobbs@electrooptical.net' }]
+requires-python = '>=3.8'
+classifiers = [
+	'Development Status :: 2 - Pre-Alpha',
+	'Intended Audience :: Developers',
+	'Natural Language :: English',
+	'Programming Language :: Python :: 3',
+	'Programming Language :: Python :: 3.8',
+	'Programming Language :: Python :: 3.9',
+	'Programming Language :: Python :: 3.10',
+	'Programming Language :: Python :: 3.11',
+	'Programming Language :: Python :: 3.12',
+	'Programming Language :: Python :: 3.13',
 ]
-description="Description"
-keywords=[]
-readme="README.md"
+description = "Description"
+keywords = []
+readme = "README.md"
 dynamic = ["dependencies"]
-
-[project.license]
-file="LICENSE"
-name="LGPL"
+license = "LGPL-2.1"
+license-files = ["LICENSE"]
 
 [project.scripts]
 
 [project.urls]
-github='https://github.com/snhobbs/pulse_transitions'
+github = 'https://github.com/snhobbs/pulse_transitions'
 
 [tool.setuptools]
 include-package-data = true
 
 [tool.setuptools.dynamic]
-dependencies = {file = ["requirements.txt"]}
+dependencies = { file = ["requirements.txt"] }
 
 [tool.hatch.metadata]
 allow-direct-references = true
 
 [tool.setuptools.packages.find]
-where=['src']
+where = ['src']
 
 [build-system]
 requires = [
-    "setuptools>=60",
-    "setuptools-scm>=8.0"
+	"setuptools>=77",      # for the license expression above (PEP 639)
+	"setuptools-scm>=8.0",
 ]
 
 
 # ==== pytest ====
 [tool.pytest.ini_options]
 minversion = "6.0"
-python_files = [
-    "tests.py",
-    "test_*.py",
-]
+python_files = ["tests.py", "test_*.py"]
 
 # ==== Coverage ====
 [tool.coverage.run]
@@ -97,30 +91,30 @@ indent_size = 2
 [tool.ruff]
 # Exclude a variety of commonly ignored directories.
 exclude = [
-    ".bzr",
-    ".direnv",
-    ".eggs",
-    ".git",
-    ".git-rewrite",
-    ".hg",
-    ".mypy_cache",
-    ".nox",
-    ".pants.d",
-    ".pytype",
-    ".ruff_cache",
-    ".svn",
-    ".tox",
-    ".venv",
-    "__pypackages__",
-    "_build",
-    "buck-out",
-    "build",
-    "dist",
-    "node_modules",
-    "venv",
-    "*/migrations/*.py",
-    "staticfiles/*",
-    "*.ipynb"
+	".bzr",
+	".direnv",
+	".eggs",
+	".git",
+	".git-rewrite",
+	".hg",
+	".mypy_cache",
+	".nox",
+	".pants.d",
+	".pytype",
+	".ruff_cache",
+	".svn",
+	".tox",
+	".venv",
+	"__pypackages__",
+	"_build",
+	"buck-out",
+	"build",
+	"dist",
+	"node_modules",
+	"venv",
+	"*/migrations/*.py",
+	"staticfiles/*",
+	"*.ipynb",
 ]
 line-length = 88
 indent-width = 4
@@ -128,78 +122,78 @@ target-version = "py311"
 
 [tool.ruff.lint]
 select = [
-  "F",
-  "E",
-  "W",
-  "C90",
-  "I",
-  "N",
-  #"UP",
-  "YTT",
-  # "ANN", # flake8-annotations: we should support this in the future but 100+ errors atm
-  "ASYNC",
-  "S",
-  "BLE",
-  "FBT",
-  "B",
-  "A",
-  "COM",
-  "C4",
-  "DTZ",
-  "T10",
-  "DJ",
-  "EM",
-  "EXE",
-  "FA",
-  'ISC',
-  "ICN",
-  "G",
-  'INP',
-  'PIE',
-  "T20",
-  'PYI',
-  'PT',
-  "Q",
-  "RSE",
-  "RET",
-  "SLF",
-  "SLOT",
-  "SIM",
-  "TID",
-  "TCH",
-  "INT",
-  # "ARG", # Unused function argument
-  "PTH",
-  "ERA",
-  "PD",
-  "PGH",
-  "PL",
-  "TRY",
-  "FLY",
-  # "NPY",
-  # "AIR",
-  "PERF",
-  # "FURB",
-  # "LOG",
-  #"RUF"
+	"F",
+	"E",
+	"W",
+	"C90",
+	"I",
+	"N",
+	#"UP",
+	"YTT",
+	# "ANN", # flake8-annotations: we should support this in the future but 100+ errors atm
+	"ASYNC",
+	"S",
+	"BLE",
+	"FBT",
+	"B",
+	"A",
+	"COM",
+	"C4",
+	"DTZ",
+	"T10",
+	"DJ",
+	"EM",
+	"EXE",
+	"FA",
+	'ISC',
+	"ICN",
+	"G",
+	'INP',
+	'PIE',
+	"T20",
+	'PYI',
+	'PT',
+	"Q",
+	"RSE",
+	"RET",
+	"SLF",
+	"SLOT",
+	"SIM",
+	"TID",
+	"TCH",
+	"INT",
+	# "ARG", # Unused function argument
+	"PTH",
+	"ERA",
+	"PD",
+	"PGH",
+	"PL",
+	"TRY",
+	"FLY",
+	# "NPY",
+	# "AIR",
+	"PERF",
+	# "FURB",
+	# "LOG",
+	#"RUF"
 ]
 ignore = [
-  "PT027",
-  "PT009",
-  "PLR2004",
-  "N803",
-  "PLR0913",
-  "UP007",
-  "UP006",
-  "SLF001", 
-  "S101", # Use of assert detected https://docs.astral.sh/ruff/rules/assert/
-  "RUF012", # Mutable class attributes should be annotated with `typing.ClassVar`
-  "SIM102", # sometimes it's better to nest
-  "COM812", # missing-trailing-comma recommended to remove
-  "ISC001", # single-line-implicit-string-concatenation recommended to remove
-  "E501",   # line too long
-  "PD901",  # generic names
-  "ERA001", # commented out code
+	"PT027",
+	"PT009",
+	"PLR2004",
+	"N803",
+	"PLR0913",
+	"UP007",
+	"UP006",
+	"SLF001",
+	"S101",    # Use of assert detected https://docs.astral.sh/ruff/rules/assert/
+	"RUF012",  # Mutable class attributes should be annotated with `typing.ClassVar`
+	"SIM102",  # sometimes it's better to nest
+	"COM812",  # missing-trailing-comma recommended to remove
+	"ISC001",  # single-line-implicit-string-concatenation recommended to remove
+	"E501",    # line too long
+	"PD901",   # generic names
+	"ERA001",  # commented out code
 ]
 # Allow fix for all enabled rules (when `--fix`) is provided.
 fixable = ["ALL"]

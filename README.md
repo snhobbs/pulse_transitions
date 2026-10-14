@@ -116,6 +116,10 @@ pip install .
 
 
 
+## License
+
+GNU Lesser General Public License, version 2.1 only (`LGPL-2.1-only`); the text is in `LICENSE`.
+
 ## Background & Resources
 ### HP Journal
 There's an excellent description of the algorithms used by HP [here](https://hparchive.com/Journals/HPJ-1996-12.pdf).
