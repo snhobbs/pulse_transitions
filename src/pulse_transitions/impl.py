@@ -244,6 +244,15 @@ def _find_peaks_and_types_histogram():
     """
 
 
+def _threshold_state(value: float, thresholds: Tuple[float, float]) -> int:
+    """1 at or above the high threshold, -1 at or below the low one, 0 between them."""
+    if value >= max(thresholds):
+        return 1
+    if value <= min(thresholds):
+        return -1
+    return 0
+
+
 def _find_peaks_and_types(
     x: NumberIterable,
     y: NumberIterable,
@@ -267,23 +276,16 @@ def _find_peaks_and_types(
 
     raw_peaks = []
 
-    def get_state(pt, thresholds) -> int:
-        if pt >= max(thresholds):
-            return 1
-        if pt <= min(thresholds):
-            return -1
-        return 0
-
     # Iterate through all points in a state machine, ends up taking the first than last crossing.
     # Will only find one edge per full crossing.
 
-    prev_state = get_state(yfilt[0], thresholds=thresholds)
+    prev_state = _threshold_state(yfilt[0], thresholds)
     edge_in_progress = False
     i1 = None
     direction = 0
 
     for i, val in enumerate(yfilt):
-        state = get_state(val, thresholds=thresholds)
+        state = _threshold_state(val, thresholds)
 
         if state == prev_state:
             continue
