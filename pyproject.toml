@@ -1,6 +1,6 @@
 [project]
 name='pulse_transitions'
-version="0.1.0"
+version="0.2.0"
 authors=[
     {name="Simon Hobbs", email='simon.hobbs@electrooptical.net'}]
 requires-python='>=3.8'

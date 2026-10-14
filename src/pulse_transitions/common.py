@@ -1,20 +1,12 @@
+from dataclasses import dataclass
 from enum import Enum
 from typing import Tuple, Optional
-
-from pydantic import BaseModel
-from pydantic import model_validator
 
 
 class EdgeSign(Enum):
     falling = -1
     rising = 1
     none = 0
-
-
-class StrictBaseModel(BaseModel):
-    model_config = {
-        "extra": "forbid"  # Disallow extra fields
-    }
 
 
 class GroupStrategy(Enum):
@@ -24,7 +16,8 @@ class GroupStrategy(Enum):
     last = "last"
 
 
-class CrossingDetectionSettings(StrictBaseModel):
+@dataclass
+class CrossingDetectionSettings:
     """
     window (float): Area around an edge to isolate for threshold crossing
     filter_order (int): Butterworth filter order for smoothing before edge finding
@@ -36,7 +29,8 @@ class CrossingDetectionSettings(StrictBaseModel):
     filter_cutoff: float = 0.9
 
 
-class Edge(BaseModel):
+@dataclass
+class Edge:
     """
     Represents an edge transition in a signal.
 
@@ -55,12 +49,12 @@ class Edge(BaseModel):
     sign: EdgeSign
     fractional_thresholds: Tuple[float, float] = (0.1, 0.9)
 
-    @model_validator(mode="after")
-    def validate_edge(self) -> "Edge":
+    def __post_init__(self) -> None:
+        self.thresholds = tuple(self.thresholds)
+        self.fractional_thresholds = tuple(self.fractional_thresholds)
         if self.start >= self.end:
             msg = "Edge start must be before end"
             raise ValueError(msg)
-        return self
 
     @property
     def dx(self) -> float:
@@ -75,7 +69,8 @@ class Edge(BaseModel):
         return (max([self.end, self.start]), max(self.thresholds))
 
 
-class PairedEdge(BaseModel):
+@dataclass
+class PairedEdge:
     rise: Edge
     fall: Edge
 
@@ -96,13 +91,15 @@ class PairedEdge(BaseModel):
         )
 
 
-class Peak(BaseModel):
+@dataclass
+class Peak:
     sign: EdgeSign
     start: float
     end: float  # x value
 
 
-class EdgeMetrics(BaseModel):
+@dataclass
+class EdgeMetrics:
     fractional_thresholds: Tuple[float, float]
     settling_time_fraction: float
     thresholds: Tuple[float, float]
