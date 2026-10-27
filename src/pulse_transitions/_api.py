@@ -39,7 +39,7 @@ __all__ = [
 
 _DEFAULT_REFERENCE = (10.0, 50.0, 90.0)
 _LEVEL_METHODS = ("mode", "mean", "peak", "endpoints")
-_MID_METHODS = ("median", "first")
+_MID_METHODS = ("median", "first", "fit")
 
 
 def _levels_for(y: np.ndarray, levels: Sequence[float] | None) -> tuple[float, float]:

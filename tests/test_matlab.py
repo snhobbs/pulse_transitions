@@ -88,6 +88,14 @@ class TestFacadeAddsNoLogic(unittest.TestCase):
         widths = [p.width for p in pt.pulses(self.y, x=self.x, levels=(0, 1))]
         close(matlab.pulsewidth(self.y, self.x, levels=(0, 1))[0], widths, "spec §C27: pulsewidth")
 
+    def test_matches_pythonic_fit(self):
+        trs = pt.transitions(self.y, x=self.x, levels=(0, 1), mid_method="fit")
+        close(matlab.midcross(self.y, self.x, levels=(0, 1), mid_method="fit"), [t.mid_instant for t in trs],
+              "spec §C27 / §C7 (rev 5): midcross with mid_method='fit'")
+        widths = [p.width for p in pt.pulses(self.y, x=self.x, levels=(0, 1), mid_method="fit")]
+        close(matlab.pulsewidth(self.y, self.x, levels=(0, 1), mid_method="fit")[0], widths,
+              "spec §C27 / §C7 (rev 5): pulsewidth with mid_method='fit'")
+
 
 if __name__ == "__main__":
     unittest.main()

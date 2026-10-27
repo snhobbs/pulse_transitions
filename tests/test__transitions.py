@@ -68,6 +68,63 @@ class TestMidMethod(TransitionAsserts, unittest.TestCase):
         self.assertEqual(result[0].mid_method, "first", msg="spec §C7: Transition records mid_method")
 
 
+ASYM = [0, 0.3, 0.4, 0.9, 1]          # i = 0, j = 3; least-squares slope 0.28 → mid 13/7
+SLUMP = [0.1, 0.8, 0.8, 0.8, 0.8, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.9]   # fitted slope < 0 on a rising edge
+EARLY = [0, 0.89, 0.89, 0.89, 0.89, 0.89, 0.89, 0.89, 1]               # unclamped fit -0.55, start 0.1 / 0.89
+
+
+class TestMidMethodFit(TransitionAsserts, unittest.TestCase):
+    """§C7 (rev 5), transitions step 5: least-squares mid instant over samples start_index .. end_index."""
+
+    def test_fit_asymmetric_edge(self):
+        (median,) = run(ASYM)
+        (fit,) = run(ASYM, mid_method="fit")
+        self.assertAlmostEqual(median.mid_instant, 2.2, delta=1e-9, msg="spec transitions example: median crossing of ASYM is 2.2")
+        self.assertTransition(fit, Transition(Polarity.RISING, 1 / 3, 13 / 7, 3.0, 0.1, 0.5, 0.9, 0, 3),
+                              "spec §C7 (rev 5) example: fit mid instant 13/7; lower/upper instants unchanged")
+        self.assertEqual(fit.mid_method, "fit", msg="spec §C7 (rev 5): Transition records mid_method='fit'")
+
+    def test_fit_symmetric_noise_agrees_with_median(self):
+        self.assertAlmostEqual(run(NOISY_MID, mid_method="fit")[0].mid_instant, 2.5, delta=1e-9,
+                               msg="spec transitions example: NOISY_MID fit mid instant 2.5")
+
+    def test_fit_two_sample_step_equals_crossing(self):
+        self.assertAlmostEqual(run([0, 0, 1, 1], mid_method="fit")[0].mid_instant, 1.5, delta=1e-9,
+                               msg="spec transitions step 5: on a 2-sample step the fit equals the interpolated crossing")
+
+    def test_fit_square_train_equals_median(self):
+        for i, (got, want) in enumerate(zip(run(SQUARE, mid_method="fit"), SQUARE_TRANSITIONS)):
+            with self.subTest(case=i):
+                self.assertTransition(got, want, "spec transitions step 5: clean square edges, fit = crossing (both polarities)")
+                self.assertEqual(got.mid_method, "fit", msg="spec §C7 (rev 5): mid_method recorded")
+
+    def test_fit_wrong_sign_slope_falls_back_to_median(self):
+        (t,) = run(SLUMP, mid_method="fit")
+        self.assertAlmostEqual(t.mid_instant, 4.5, delta=1e-9, msg="spec transitions step 5: slope < 0 on a rising edge → median crossing 4.5")
+        self.assertEqual(t.mid_method, "median", msg="spec §C7 (rev 5): a fallback records mid_method='median'")
+
+    def test_fit_wrong_sign_slope_falls_back_falling(self):
+        (t,) = run([1 - v for v in SLUMP], mid_method="fit")
+        self.assertEqual(t.polarity, Polarity.FALLING, msg="spec §C10: negated SLUMP is one falling transition")
+        self.assertAlmostEqual(t.mid_instant, 4.5, delta=1e-9, msg="spec transitions step 5: slope > 0 on a falling edge → median crossing")
+        self.assertEqual(t.mid_method, "median", msg="spec §C7 (rev 5): a fallback records mid_method='median'")
+
+    def test_fit_clamped_to_start(self):
+        (t,) = run(EARLY, mid_method="fit")
+        self.assertAlmostEqual(t.start, 0.1 / 0.89, delta=1e-9, msg="spec transitions example: EARLY starts at 0.1 / 0.89")
+        self.assertAlmostEqual(t.mid_instant, 0.1 / 0.89, delta=1e-9,
+                               msg=f"spec transitions step 5 / §C9: the fitted instant (-0.55 unclamped) is clamped to start; got {t.mid_instant!r}")
+        self.assertEqual(t.mid_method, "fit", msg="spec §C7 (rev 5): a clamped fit is still mid_method='fit'")
+
+    def test_fit_bracketing_on_noisy_train(self):
+        x, y = pulse_train(20_000, periods=4)
+        result = run(y, x=x, mid_method="fit")
+        self.assertEqual(len(result), 8, msg="spec §C5: fit doesn't change which transitions are found")
+        for i, t in enumerate(result):
+            with self.subTest(case=i):
+                self.assertTrue(t.start <= t.mid_instant <= t.end, msg=f"spec §C9: start <= mid_instant <= end with fit in {t!r}")
+
+
 class TestMedianReferenceInstants(TransitionAsserts, unittest.TestCase):
     """§C7 (rev 3): lower/upper instants are median crossings within windows guarded by the state levels."""
 
@@ -150,6 +207,34 @@ class TestAccuracy(unittest.TestCase):
                 (t,) = run(y, x=x)
                 self.assertAlmostEqual(t.duration, TAU_LN9, delta=rel * TAU_LN9,
                                        msg=f"spec §C12: RC 10-90 % = tau ln 9 within {rel:.1%} at {samples_per_tau}/tau; got {t.duration!r}")
+
+
+class TestFitAccuracy(unittest.TestCase):
+    """§C31 (rev 5): accuracy of mid_method='fit'."""
+
+    def test_fit_exact_on_linear_ramp(self):
+        for offset in (0.0, 0.25, 0.5, 0.77):
+            with self.subTest(case=offset):
+                x, y, s = ramp(offset)
+                (t,) = run(y, x=x, mid_method="fit")
+                self.assertAlmostEqual(t.mid_instant, s + 1.0, delta=1e-9 * (s + 1.0),
+                                       msg=f"spec §C31: fit is exact on a linear ramp at offset {offset}; got {t.mid_instant!r}, want {s + 1.0!r}")
+
+    def test_fit_beats_median_on_noisy_linear_edge(self):
+        x = np.arange(4200, dtype=float)
+        clean = np.clip((x - 1600) / 1000, 0, 1)
+        fit_err, median_err = [], []
+        for seed in range(50):
+            y = clean + np.random.default_rng(seed).normal(0, 0.02, x.size)
+            fit = run(y, x=x, mid_method="fit")
+            median = run(y, x=x)
+            self.assertEqual(len(fit), 1, msg=f"spec §C31: seed {seed} gives exactly one transition, got {len(fit)}")
+            fit_err.append(fit[0].mid_instant - 2100)
+            median_err.append(median[0].mid_instant - 2100)
+        fit_rms = float(np.sqrt(np.mean(np.square(fit_err))))
+        median_rms = float(np.sqrt(np.mean(np.square(median_err))))
+        self.assertLessEqual(fit_rms, 0.002 * 1000, msg=f"spec §C31: fit RMS error {fit_rms:.3f} samples, limit 2 (0.2 % of the 1000-sample rise)")
+        self.assertLessEqual(fit_rms, 0.5 * median_rms, msg=f"spec §C31: fit RMS {fit_rms:.3f} must be <= half the median's {median_rms:.3f}")
 
 
 if __name__ == "__main__":

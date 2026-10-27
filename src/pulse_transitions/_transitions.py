@@ -24,6 +24,25 @@ def _median_instant(
     return interpolate_instant(x[k], y[k], x[k + 1], y[k + 1], level)
 
 
+def _fitted_instants(
+    x: np.ndarray, y: np.ndarray, i: np.ndarray, j: np.ndarray, rising: np.ndarray, level: float,
+    start: np.ndarray, end: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Mid-level instant of a least-squares line through samples i .. j of each transition, clamped
+    to [start, end]; NaN where the slope isn't finite or has the wrong sign. Also returns the mask of
+    usable fits."""
+    instant = np.full(len(i), np.nan)
+    for n in range(len(i)):
+        xs, ys = x[i[n]:j[n] + 1], y[i[n]:j[n] + 1]
+        x_mean, y_mean = xs.mean(), ys.mean()
+        xc = xs - x_mean
+        with np.errstate(divide="ignore", invalid="ignore"):
+            slope = float(xc @ (ys - y_mean)) / float(xc @ xc)
+        if np.isfinite(slope) and (slope > 0 if rising[n] else slope < 0):
+            instant[n] = min(max(x_mean + (level - y_mean) / slope, start[n]), end[n])
+    return instant, np.isfinite(instant)
+
+
 def _last_at_or_before(mask: np.ndarray) -> np.ndarray:
     """For each index, the last index at or before it where `mask` holds; -1 if none."""
     return np.maximum.accumulate(np.where(mask, np.arange(len(mask)), -1))
@@ -57,7 +76,8 @@ def find_transitions(
         x: Strictly increasing sample instants.
         y: Samples, same length as `x`.
         ref_levels: Absolute (lower, mid, upper) reference levels.
-        mid_method: "median" or "first" mid-level crossing within each transition.
+        mid_method: "median" or "first" mid-level crossing within each transition, or "fit" for the
+            mid-level instant of a least-squares line through it (median where the fit is unusable).
         state_levels: (low, high) state levels guarding the lower/upper windows.
 
     Returns:
@@ -102,7 +122,15 @@ def find_transitions(
     upper_instant = _median_instant(
         x, y, _crossings(y >= upper), np.where(rising, i, a), np.where(rising, b, j), upper, True
     )
-    mid_instant = _median_instant(x, y, _crossings(y >= mid), i, j, mid, mid_method == "median")
+    mid_instant = _median_instant(x, y, _crossings(y >= mid), i, j, mid, mid_method != "first")
+    methods = np.full(len(i), mid_method, dtype=object)
+    if mid_method == "fit":
+        # Least-squares line through i .. j (rev 5); the median crossing stands in where the fit can't be used.
+        start = np.minimum(lower_instant, upper_instant)
+        end = np.maximum(lower_instant, upper_instant)
+        fitted, usable = _fitted_instants(x, y, i, j, rising, mid, start, end)
+        mid_instant = np.where(usable, fitted, mid_instant)
+        methods[~usable] = "median"
 
     return tuple(
         Transition(
@@ -115,7 +143,7 @@ def find_transitions(
             upper_level=float(upper),
             start_index=int(i[n]),
             end_index=int(j[n]),
-            mid_method=mid_method,
+            mid_method=str(methods[n]),
         )
         for n in range(len(i))
     )

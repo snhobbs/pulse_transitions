@@ -1,57 +1,52 @@
 # pulse_transitions
-This library implements a python version of the [Pulse and Transition Metrics function category](https://www.mathworks.com/help/signal/pulse-and-transition-metrics.html?s_tid=CRUX_lftnav) in Matlab.
+Pulse and transition metrics for sampled waveforms, following IEEE Std 181-2003: state levels, transition instants,
+rise and fall times, slew rate, overshoot, undershoot, settling time, pulse width, period and duty cycle. A
+`matlab` module mirrors MATLAB's [Pulse and Transition Metrics](https://www.mathworks.com/help/signal/pulse-and-transition-metrics.html)
+functions. numpy is the only runtime dependency.
 
 ## Example Use Case
-![Second Order System](second-order.png)
+![Second Order System](examples/second-order-annotations.png)
 
-For the full example see [examples/second_order_system.py](https://github.com/snhobbs/pulse_transitions/examples/second_order_system.py).
+For the full example see [examples/second_order_system.py](https://github.com/snhobbs/pulse_transitions/blob/main/examples/second_order_system.py).
+
+Every function takes the waveform `y` first and everything else by keyword. Give the time axis as `x=` (any
+spacing), as a sample rate `fs=`, or leave both out to use sample indices. Reference levels are percentages
+`(lower, mid, upper)` of the amplitude, default `(10, 50, 90)`.
 
 ```python
 import numpy as np
-from scipy.signal import lsim
-from scipy.signal import lti
+import pulse_transitions as pt
 
-from pulse_transitions import detect_edges
-from pulse_transitions import detect_signal_levels
-from pulse_transitions import get_edge_metrics
+t = np.linspace(0, 10e-6, 100_000)
+y = np.clip((t % 2e-6 - 0.4e-6) / 40e-9, 0, 1) - np.clip((t % 2e-6 - 1.2e-6) / 40e-9, 0, 1)
 
+levels = pt.state_levels(y, x=t)                     # histogram mode: levels.low, levels.high
+for tr in pt.transitions(y, x=t, levels=levels.levels):
+    print(tr.polarity.name, tr.mid_instant, tr.duration, tr.slew_rate)
 
-# Example: synthetic underdamped step response
-def generate_step_response(t, damping=0.2, freq=10):
-    # Second-order system parameters
-    wn = freq          # Natural frequency (rad/s)
-    zeta = damping        # Damping ratio
+step = pt.step_metrics(y, x=t, bounds=(0, 1e-6))     # exactly one transition: the first rise
+print(step.post_overshoot.percent, step.settling_time)
 
-    # Transfer function: H(s) = wn^2 / (s^2 + 2*zeta*wn*s + wn^2)
-    num = [wn**2]
-    den = [1, 2*zeta*wn, wn**2]
-
-    # Create the system
-    system = lti(num, den)
-
-    u = [0]*len(t[t<0]) + [1]*len(t[t>=0])
-    t_shift = t-min(t)
-    t_out, y_out, _ = lsim(system, U=u, T=t_shift)
-
-    return t, y_out
-
-# Generate data
-t = np.linspace(-0.25, 1, 1000)
-t_out, y = generate_step_response(t, freq=25/(max(t)))
-
-threshold_fractions=(0.1, 0.9)
-
-# Estimate levels (e.g. using histogram or endpoints)
-levels = detect_signal_levels(x=t, y=y, method="histogram")
-low, high = levels
-
-# Detect edges
-edge = detect_edges(t, y, levels=levels, fractional_thresholds=threshold_fractions)[0]
-
-# Compute overshoot / undershoot
-metrics = get_edge_metrics(x=t, y=y, fractional_thresholds=threshold_fractions, levels=levels)
+for p in pt.pulses(y, x=t):
+    print(p.width, p.period, p.duty_cycle)
 ```
 
+| Function | Returns |
+| --- | --- |
+| `state_levels(y, method="mode")` | `StateLevels(low, high)`; methods `mode`, `mean`, `peak`, `endpoints` |
+| `reference_levels(levels, reference)` | absolute `(lower, mid, upper)` levels |
+| `transitions(y, ...)` | every `Transition` in time order: polarity, lower/mid/upper instants, `duration`, `slew_rate` |
+| `transition_metrics(y, ...)` | `TransitionMetrics` per transition: pre/post overshoot and undershoot, settling time |
+| `step_metrics(y, ...)` | `TransitionMetrics` of the one transition in the data (use `bounds=` to pick it) |
+| `pulses(y, ..., polarity=Polarity.RISING)` | `Pulse` per pulse: width, period, separation, duty cycle |
+| `measure_edge(y, around=...)` | one edge of a multi-level trace, measured between its own levels |
+| `flatness(y, bounds=...)` | standard deviation of a window, normalised to the final level |
+
+`bounds=(start, end)` restricts any analysis to `start <= x <= end`; detected levels then come from that window.
+Noise near a reference level doesn't bias the instants: each one is the median crossing of its level. The mid
+instant can instead be the first crossing (`mid_method="first"`), or where a least-squares line through the edge
+crosses the mid level (`mid_method="fit"`). On a noisy, near-linear edge the fit is several times more precise
+than the median; on a curved edge (an RC step, say) it is biased, so it isn't the default.
 
 ## Measuring one edge of a signal that has several
 
@@ -62,22 +57,76 @@ the flat parts either side of it (or levels you pass):
 ```python
 from pulse_transitions import EdgeNotFoundError, measure_edge
 
+x = np.arange(0, 14, 0.01)
+y = np.clip((x - 2) / 2, 0, 1) + 2 * np.clip((x - 6) / 2, 0, 1)   # 0 → 1, then 1 → 3
+
 try:
-    measured = measure_edge(t, y, around=2.5, max_distance=0.2, fractional_thresholds=(0.2, 0.8))
-except EdgeNotFoundError as error:  # also an IndexError and a ValueError
+    edge = measure_edge(y, x=x, around=7.0, max_distance=1.0, reference=(20, 50, 80))
+except EdgeNotFoundError as error:
     print(error)
 else:
-    bottom, top = measured.levels
-    print(measured.edge.start, measured.edge.end, measured.duration)
+    bottom, top = edge.levels                 # (1.0, 3.0)
+    print(edge.transition.start, edge.transition.end, edge.duration)
 ```
 
-`Edge.start` and `Edge.end` are the first and the last threshold crossing in time order, so a falling edge
-crosses its high threshold at `start`.
+`Transition.start` and `Transition.end` are the first and last reference crossings in time order, so a falling
+edge crosses its upper level at `start`.
+
+## MATLAB-style functions
+
+`pulse_transitions.matlab` keeps MATLAB's names, positional `(y, t)` arguments and array outputs, and adds no logic
+of its own: each value equals the matching call above.
+
+```python
+from pulse_transitions import matlab
+
+d, lower, upper, lower_level, upper_level = matlab.risetime(y, x)
+```
+
+| Function | Description | Implemented? |
+| --- | --- | --- |
+| [statelevels](https://www.mathworks.com/help/signal/ref/statelevels.html) | State-level estimation for bilevel waveform with histogram method | ☑️ |
+| [midcross](https://www.mathworks.com/help/signal/ref/midcross.html) | Mid-reference level crossing for bilevel waveform | ☑️ |
+| [risetime](https://www.mathworks.com/help/signal/ref/risetime.html) | Rise time of positive-going bilevel waveform transitions | ☑️ |
+| [falltime](https://www.mathworks.com/help/signal/ref/falltime.html) | Fall time of negative-going bilevel waveform transitions | ☑️ |
+| [slewrate](https://www.mathworks.com/help/signal/ref/slewrate.html) | Slew rate of bilevel waveform | ☑️ |
+| [overshoot](https://www.mathworks.com/help/signal/ref/overshoot.html) | Overshoot metrics of bilevel waveform transitions | ☑️ |
+| [undershoot](https://www.mathworks.com/help/signal/ref/undershoot.html) | Undershoot metrics of bilevel waveform transitions | ☑️ |
+| [settlingtime](https://www.mathworks.com/help/signal/ref/settlingtime.html) | Settling time for bilevel waveform | ☑️ |
+| [pulsewidth](https://www.mathworks.com/help/signal/ref/pulsewidth.html) | Bilevel waveform pulse width | ☑️ |
+| [pulseperiod](https://www.mathworks.com/help/signal/ref/pulseperiod.html) | Period of bilevel pulse | ☑️ |
+| [pulsesep](https://www.mathworks.com/help/signal/ref/pulsesep.html) | Separation between bilevel waveform pulses | ☑️ |
+| [dutycycle](https://www.mathworks.com/help/signal/ref/dutycycle.html) | Duty cycle of pulse waveform | ☑️ |
+
+The histogram `mode` level is the mean of the samples in the modal bin rather than the bin centre, so clean levels
+come out exact. `pulseperiod`, `pulsesep` and `dutycycle` report complete periods only, and `overshoot` and
+`undershoot` report the post-transition region, as MATLAB does by default.
 
 ## Errors
 
-Unknown keyword arguments raise `TypeError` rather than being ignored (`thresholds=` is `fractional_thresholds=`).
-Functions that look for an edge return `[]` or `None` when there is none; `measure_edge` raises `EdgeNotFoundError`.
+Every library error is a `PulseTransitionsError`, which is a `ValueError`:
+
+- `InputError`: a bad argument; the message names it.
+- `LevelError`: two state levels can't be found (for example, a constant signal).
+- `EdgeNotFoundError`: an edge that must exist doesn't; the message says what is missing.
+
+Unknown keyword arguments raise `TypeError` rather than being ignored. `transitions`, `transition_metrics` and
+`pulses` return `()` when there is nothing to report; only `step_metrics` and `measure_edge` raise for a missing
+edge. Samples where `x` or `y` is NaN are dropped first.
+
+## Upgrading from v0.2
+
+v0.3 is a rewrite and breaks the v0.2 API:
+
+- `y` comes first and `x` is a keyword: `f(x, y)` becomes `f(y, x=x)`. A v0.2-style call raises `TypeError`
+  instead of silently swapping the axes.
+- `detect_signal_levels` is `state_levels`, `detect_edges` is `transitions`, and `get_edge_metrics` is
+  `transition_metrics` (or `step_metrics` for a single step).
+- `fractional_thresholds=(0.1, 0.9)` is `reference=(10, 50, 90)`, in percent.
+- `Edge` is `Transition`; `measure_edge` returns `EdgeMeasurement` with the `Transition` in `.transition`.
+- `EdgeNotFoundError` is no longer an `IndexError`, and `flatness` returns NaN instead of `None`.
+- scipy is no longer a dependency, and `CrossingDetectionSettings` is gone: hysteresis between the reference levels
+  rejects noise. Filter before measuring if you need to (the example shows how).
 
 ## Installation
 ### pypi
@@ -96,31 +145,21 @@ git clone https://github.com/snhobbs/pulse_transitions/
 pip install .
 ```
 
-
-## Matpulse Functions
-
-| Function                                                                    | Description                                                       |                  | Implemented?
-| --------------------------------------------------------------------------- | ----------------------------------------------------------------- | ---------------- |---------
-| [midcross](https://www.mathworks.com/help/signal/ref/midcross.html)         | Mid-reference level crossing for bilevel waveform                 |                  | ☑️
-| [statelevels](https://www.mathworks.com/help/signal/ref/statelevels.html)   | State-level estimation for bilevel waveform with histogram method |                  | ☑️
-| [falltime](https://www.mathworks.com/help/signal/ref/falltime.html)         | Fall time of negative-going bilevel waveform transitions          |                  | ☑️
-| [overshoot](https://www.mathworks.com/help/signal/ref/overshoot.html)       | Overshoot metrics of bilevel waveform transitions                 |                  | ☑️
-| [risetime](https://www.mathworks.com/help/signal/ref/risetime.html)         | Rise time of positive-going bilevel waveform transitions          |                  | ☑️
-| [settlingtime](https://www.mathworks.com/help/signal/ref/settlingtime.html) | Settling time for bilevel waveform                                |                  | ☑️
-| [slewrate](https://www.mathworks.com/help/signal/ref/slewrate.html)         | Slew rate of bilevel waveform                                     |                  | ☑️
-| [undershoot](https://www.mathworks.com/help/signal/ref/undershoot.html)     | Undershoot metrics of bilevel waveform transitions                |                  | ☑️
-| [dutycycle](https://www.mathworks.com/help/signal/ref/dutycycle.html)       | Duty cycle of pulse waveform                                      |                  | ❌
-| [pulseperiod](https://www.mathworks.com/help/signal/ref/pulseperiod.html)   | Period of bilevel pulse                                           |                  | ❌
-| [pulsesep](https://www.mathworks.com/help/signal/ref/pulsesep.html)         | Separation between bilevel waveform pulses                        |                  | ❌
-| [pulsewidth](https://www.mathworks.com/help/signal/ref/pulsewidth.html)     | Bilevel waveform pulse width                                      |                  | ❌
-
-
+## Tests
+```bash
+PYTHONPATH=src python -m unittest discover -s tests -t . -v
+PT_PERF=1 PYTHONPATH=src python -m unittest tests.test_performance -v   # timing tests
+PYTHONPATH=src python benchmarks/benchmark.py
+```
 
 ## License
 
 GNU Lesser General Public License, version 2.1 only (`LGPL-2.1-only`); the text is in `LICENSE`.
 
 ## Background & Resources
+### IEEE Std 181-2003
+IEEE Standard on Transitions, Pulses, and Related Waveforms: the definitions this library follows.
+
 ### HP Journal
 There's an excellent description of the algorithms used by HP [here](https://hparchive.com/Journals/HPJ-1996-12.pdf).
 

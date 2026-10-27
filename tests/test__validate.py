@@ -104,8 +104,8 @@ class TestCheckChoice(unittest.TestCase):
                          msg="spec §E15: an allowed value is returned")
 
     def test_check_choice_raises_naming_argument(self):
-        with self.assertRaises(InputError, msg="spec §E15: mid_method='fit' is not allowed yet") as caught:
-            check_choice("mid_method", "fit", ("median", "first"))
+        with self.assertRaises(InputError, msg="spec §E15 (rev 5): mid_method='slope' is not an allowed value") as caught:
+            check_choice("mid_method", "slope", ("median", "first", "fit"))
         self.assertIn("mid_method", str(caught.exception), msg="spec Error contract: the message names the argument")
 
 

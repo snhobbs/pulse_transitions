@@ -35,6 +35,11 @@ class TestPerformance(unittest.TestCase):
         elapsed = best_of(lambda: pt.transitions(self.y6, x=self.x6, levels=(0, 1)))
         self.assertLessEqual(elapsed, 0.100, msg=f"spec §C22: transitions on 1e6 samples took {elapsed * 1e3:.1f} ms, limit 100 ms (v0.2: 1009 ms)")
 
+    def test_transitions_fit_1e6_under_100ms(self):
+        pt.transitions(self.y6, x=self.x6, levels=(0, 1), mid_method="fit")  # warm-up
+        elapsed = best_of(lambda: pt.transitions(self.y6, x=self.x6, levels=(0, 1), mid_method="fit"))
+        self.assertLessEqual(elapsed, 0.100, msg=f"spec §C31 / §C22: transitions(mid_method='fit') on 1e6 samples took {elapsed * 1e3:.1f} ms, limit 100 ms")
+
     def test_transitions_scale_linearly(self):
         t6 = best_of(lambda: pt.transitions(self.y6, x=self.x6, levels=(0, 1)))
         t5 = best_of(lambda: pt.transitions(self.y5, x=self.x5, levels=(0, 1)))

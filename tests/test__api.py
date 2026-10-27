@@ -90,6 +90,22 @@ class TestTransitions(TransitionAsserts, unittest.TestCase):
         self.assertAlmostEqual(pt.transitions(NOISY_MID, levels=(0, 1), mid_method="first")[0].mid_instant, 1.5, delta=1e-9,
                                msg="spec §C7: mid_method='first'")
 
+    def test_transitions_mid_method_fit(self):
+        (t,) = pt.transitions([0, 0.3, 0.4, 0.9, 1], levels=(0, 1), mid_method="fit")
+        self.assertAlmostEqual(t.mid_instant, 13 / 7, delta=1e-9, msg="spec §C7 (rev 5): public transitions accept mid_method='fit'")
+        self.assertEqual(t.mid_method, "fit", msg="spec §C7 (rev 5): mid_method recorded")
+
+    def test_mid_method_fit_flows_through(self):
+        y = [0, 0, 1, 1, 1, 0, 0, 1, 1, 1, 0]
+        self.assertEqual([p.width for p in pt.pulses(y, levels=(0, 1), mid_method="fit")], [3.0, 3.0],
+                         msg="spec §C7 (rev 5): pulses accept mid_method='fit' (clean edges: same widths)")
+        m = pt.step_metrics([0, 0, 0.3, 0.4, 0.9, 1, 1, 1], levels=(0, 1), mid_method="fit")
+        self.assertEqual(m.transition.mid_method, "fit", msg="spec §C7 (rev 5): step_metrics accepts mid_method='fit'")
+        x = np.arange(0, 14, 0.01)
+        y2 = np.clip((x - 2) / 2, 0, 1) + 2 * np.clip((x - 6) / 2, 0, 1)
+        r = pt.measure_edge(y2, x=x, around=7.0, mid_method="fit")
+        self.assertAlmostEqual(r.transition.mid_instant, 7.0, delta=1e-6, msg="spec §C7 (rev 5): measure_edge accepts 'fit'; linear edge mid at 7.0")
+
     def test_transitions_median_reference_instants(self):
         (t,) = pt.transitions(DITHER, levels=(0, 1))
         self.assertAlmostEqual(t.lower_instant, 1.5, delta=1e-9, msg="spec §C7 (rev 3): public transitions pass the state levels; median 10 % crossing")
@@ -99,7 +115,7 @@ class TestTransitions(TransitionAsserts, unittest.TestCase):
         cases = {
             "§E4 reversed levels": (InputError, dict(levels=(1, 0))),
             "§E5 bad reference": (InputError, dict(levels=(0, 1), reference=(10, 90))),
-            "§E15 mid_method fit (deferred)": (InputError, dict(levels=(0, 1), mid_method="fit")),
+            "§E15 (rev 5) mid_method slope": (InputError, dict(levels=(0, 1), mid_method="slope")),
             "§E15 polarity not a Polarity": (InputError, dict(levels=(0, 1), polarity="rising")),
             "§E14 unknown keyword": (TypeError, dict(levels=(0, 1), thresholds=(0.1, 0.9))),
         }
@@ -187,8 +203,8 @@ class TestMeasureEdgeAndFlatness(unittest.TestCase):
         x, y = staircase()
         with self.assertRaises(EdgeNotFoundError, msg="spec §E11 via the public API"):
             pt.measure_edge(y, x=x, around=11.0, max_distance=1.0)
-        with self.assertRaises(InputError, msg="spec §E15: mid_method checked by measure_edge"):
-            pt.measure_edge(y, x=x, around=7.0, mid_method="fit")
+        with self.assertRaises(InputError, msg="spec §E15 (rev 5): mid_method checked by measure_edge"):
+            pt.measure_edge(y, x=x, around=7.0, mid_method="slope")
         with self.assertRaises(TypeError, msg="spec Public API: around is required and keyword-only"):
             pt.measure_edge(y, 7.0)
 
