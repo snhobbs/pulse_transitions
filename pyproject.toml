@@ -46,8 +46,9 @@ requires = [
 
 # ==== pytest ====
 [tool.pytest.ini_options]
-minversion = "6.0"
+minversion = "7.0"
 python_files = ["tests.py", "test_*.py"]
+pythonpath = ["src"]
 
 # ==== Coverage ====
 [tool.coverage.run]

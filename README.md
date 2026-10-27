@@ -5,9 +5,10 @@ rise and fall times, slew rate, overshoot, undershoot, settling time, pulse widt
 functions. numpy is the only runtime dependency.
 
 ## Example Use Case
-![Second Order System](examples/second-order-annotations.png)
+![Second-order step response](examples/figures/step_metrics.svg)
 
-For the full example see [examples/second_order_system.py](https://github.com/snhobbs/pulse_transitions/blob/main/examples/second_order_system.py).
+For the full example see [examples/step_metrics.py](examples/step_metrics.py); there is one example per feature
+under [Examples](#examples).
 
 Every function takes the waveform `y` first and everything else by keyword. Give the time axis as `x=` (any
 spacing), as a sample rate `fs=`, or leave both out to use sample indices. Reference levels are percentages
@@ -128,6 +129,66 @@ v0.3 is a rewrite and breaks the v0.2 API:
 - scipy is no longer a dependency, and `CrossingDetectionSettings` is gone: hysteresis between the reference levels
   rejects noise. Filter before measuring if you need to (the example shows how).
 
+## Examples
+
+Each script in `examples/` demonstrates one feature, prints its measurements and saves the figure shown here to
+`examples/figures/<script>.svg`.
+
+### `state_levels`: [state_levels.py](examples/state_levels.py)
+The four level methods on a ringing pulse train. Overshoot pulls `peak` (and slightly `mean`) away from the settled
+levels; `mode`, the default, and `endpoints` find them.
+
+![state_levels](examples/figures/state_levels.svg)
+
+### `reference_levels`: [reference_levels.py](examples/reference_levels.py)
+The same edge with 10/50/90 % and 20/50/80 % reference levels, and the rise time each gives.
+
+![reference_levels](examples/figures/reference_levels.svg)
+
+### `transitions`: [transitions.py](examples/transitions.py)
+Every edge of a pulse train with its lower, mid and upper instants, duration and slew rate.
+
+![transitions](examples/figures/transitions.svg)
+
+### `transition_metrics`: [transition_metrics.py](examples/transition_metrics.py)
+Overshoot and undershoot in each post-transition aberration region, and the settling time into the ±2 % band.
+
+![transition_metrics](examples/figures/transition_metrics.svg)
+
+### `step_metrics`: [step_metrics.py](examples/step_metrics.py)
+A noisy second-order step response, low-pass filtered, with its rise time, aberrations and settling time: the
+figure at the [top of this page](#example-use-case).
+
+### `pulses`: [pulses.py](examples/pulses.py)
+Width, separation and period of a PWM signal, and each period's duty cycle. The last pulse has no next rising edge,
+so its period and duty cycle are NaN.
+
+![pulses](examples/figures/pulses.svg)
+
+### `measure_edge`: [measure_edge.py](examples/measure_edge.py)
+Three edges of a multi-level TDR trace, each found near `around` and measured between the flat levels either side.
+
+![measure_edge](examples/figures/measure_edge.svg)
+
+### `flatness`: [flatness.py](examples/flatness.py)
+Flatness of a ringing window and a settled one, and over a sliding 100 ms window.
+
+![flatness](examples/figures/flatness.svg)
+
+### `mid_method`: [mid_method.py](examples/mid_method.py)
+Median, first-crossing and least-squares mid instants on a noisy edge, and their RMS error on linear and RC edges.
+
+![mid_method](examples/figures/mid_method.svg)
+
+### `matlab` functions: [matlab_facade.py](examples/matlab_facade.py)
+`statelevels`, `risetime`, `falltime`, `midcross`, `pulsewidth` and `dutycycle` on a PWM signal.
+
+![matlab_facade](examples/figures/matlab_facade.svg)
+
+`make examples` rebuilds the figures whose script, `examples/_plot.py` or library code changed (`make -j` runs
+them in parallel; set `PYTHON=` to choose the interpreter). Run one script directly with
+`PYTHONPATH=src python examples/<script>.py`.
+
 ## Installation
 ### pypi
 ```bash
@@ -147,6 +208,7 @@ pip install .
 
 ## Tests
 ```bash
+make test                                       # or: pytest
 PYTHONPATH=src python -m unittest discover -s tests -t . -v
 PT_PERF=1 PYTHONPATH=src python -m unittest tests.test_performance -v   # timing tests
 PYTHONPATH=src python benchmarks/benchmark.py
