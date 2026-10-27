@@ -49,6 +49,10 @@ instant can instead be the first crossing (`mid_method="first"`), or where a lea
 crosses the mid level (`mid_method="fit"`). On a noisy, near-linear edge the fit is several times more precise
 than the median; on a curved edge (an RC step, say) it is biased, so it isn't the default.
 
+Overshoot and undershoot are the actual excursion past the state level, however small, measured in an aberration
+region that starts where the waveform first reaches its new level and runs `aberration_factor` (default 3) edge
+durations. Noise peaks are excursions too, so filter noisy data first; `state_tolerance` (2 %) sets the settling band.
+
 ## Measuring one edge of a signal that has several
 
 A trace that steps through several levels (a TDR trace has a new level after every discontinuity) has no single
@@ -185,6 +189,58 @@ Median, first-crossing and least-squares mid instants on a noisy edge, and their
 
 ![matlab_facade](examples/figures/matlab_facade.svg)
 
+### Accuracy against the closed form
+
+These measure a synthesised second-order step, `1 - e^(-ζωn t) sin(ωd t + acos ζ) / sqrt(1 - ζ²)`, and compare
+with its exact metrics: the overshoot `100 e^(-πζ / sqrt(1 - ζ²))`, the undershoot (its first trough, the overshoot
+squared), and the rise and settling times by root finding on the closed form.
+
+#### Across damping ratios: [analytic_damping.py](examples/analytic_damping.py)
+ζ from 0.1 to 0.95 with 0.5 % RMS noise, low-pass filtered, 30 noise seeds each. Overshoot, undershoot and rise time
+match the exact values to within a few hundredths. Settling time follows the closed form's staircase (each step is
+where another ringing peak drops inside the ±2 % band) and scatters only where a peak sits right at the band edge.
+
+![analytic_damping](examples/figures/analytic_damping.svg)
+
+#### As noise grows: [analytic_noise.py](examples/analytic_noise.py)
+ζ = 0.5, noise from 0 to 3 % RMS, raw and low-pass filtered. Unfiltered, the overshoot reads high by about twice the
+RMS noise, because a noise peak on the ringing counts as excursion; the settling time jumps to the end of the record
+once noise peaks reach the ±2 % band, at about 0.5 % RMS. Filtering removes most of both. Rise time is unbiased.
+
+![analytic_noise](examples/figures/analytic_noise.svg)
+
+#### As sampling gets coarser: [analytic_sampling.py](examples/analytic_sampling.py)
+ζ = 0.5, noiseless, from 50 down to 1.5 samples per rise time at random sample offsets. Interpolated crossings keep
+the rise time within 1 % down to about 6 samples per edge; the overshoot is the largest sample, so it reads low once
+the peak falls between samples, bounded by the peak half a sample away.
+
+![analytic_sampling](examples/figures/analytic_sampling.svg)
+
+### Measured data
+
+These use real captures from [examples/data](examples/data/README.md).
+
+#### Photoreceiver pulse response: [photoreceiver_pulse.py](examples/photoreceiver_pulse.py)
+A 10 MΩ photoreceiver with two photodiodes, A and B, at small and large output swing. Each capture starts
+with a one-sample trigger glitch, so the analysis uses `bounds=` to skip it. Both edges overshoot by 0.6–2.8 %; at
+large swing photodiode B overshoots most and takes twice as long to settle.
+
+![photoreceiver_pulse](examples/figures/photoreceiver_pulse.svg)
+
+#### TDR terminations: [tdr_terminations.py](examples/tdr_terminations.py)
+One probe into open, short, 100 Ω, 50 Ω and waveguide terminations. `measure_edge` measures each reflection between
+its own levels, picks the waveguide's far-end edge out of the same trace, and raises `EdgeNotFoundError` for the
+matched 50 Ω load, which reflects nothing.
+
+![tdr_terminations](examples/figures/tdr_terminations.svg)
+
+#### Cable skin effect: [cable_skin_effect.py](examples/cable_skin_effect.py)
+The open end of 50 m of RG58. The skin-effect tail never flattens, so the high level depends on the `state_levels`
+method and the 10–90 % rise time ranges from 43 ns to 84 ns; 20–80 % narrows it but doesn't remove it. Report the
+level method and reference with a rise time.
+
+![cable_skin_effect](examples/figures/cable_skin_effect.svg)
+
 `make examples` rebuilds the figures whose script, `examples/_plot.py` or library code changed (`make -j` runs
 them in parallel; set `PYTHON=` to choose the interpreter). Run one script directly with
 `PYTHONPATH=src python examples/<script>.py`.
@@ -213,6 +269,9 @@ PYTHONPATH=src python -m unittest discover -s tests -t . -v
 PT_PERF=1 PYTHONPATH=src python -m unittest tests.test_performance -v   # timing tests
 PYTHONPATH=src python benchmarks/benchmark.py
 ```
+
+`tests/test_examples.py` runs every example script as a smoke test, writing the figures to a temporary directory;
+it is skipped when matplotlib or scipy isn't installed.
 
 ## License
 

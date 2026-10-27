@@ -2,24 +2,25 @@
 
     PYTHONPATH=src python examples/transition_metrics.py
 
-The post-transition aberration region runs from the end of each edge for
-aberration_factor (default 3) edge durations. Its overshoot and undershoot are given as a
+The post-transition aberration region runs for
+aberration_factor (default 3) edge durations, starting at the first sample that has reached
+the final state. Its overshoot and undershoot are given as a
 percentage of the amplitude, and the settling time runs from the mid instant to the last
 entry into the state_tolerance band (default 2 %) around the final level.
 """
 
 from __future__ import annotations
 
-import math
-
 import matplotlib.pyplot as plt
 import numpy as np
 
 import pulse_transitions as pt
-from _plot import ACCENT, FALLING, RISING, SIGNAL, second_order_step, save
+from _plot import ACCENT, FALLING, RISING, SIGNAL, post_region, second_order_step, save
 
 TOLERANCE = 2.0  # percent of the amplitude
-ABERRATION_FACTOR = 3.0  # post-transition region length, in edge durations
+# Post-transition region length in edge durations. The default, 3 (MATLAB's too), ends before the first
+# trough of this underdamped response, so the undershoot would be read at the region's end; 5 covers it.
+ABERRATION_FACTOR = 5.0
 
 
 def main() -> None:
@@ -39,7 +40,7 @@ def main() -> None:
     for item in metrics:
         edge = item.transition
         color = RISING if edge.polarity is pt.Polarity.RISING else FALLING
-        ax.axvspan(edge.end, edge.end + ABERRATION_FACTOR * edge.duration, color=color, alpha=0.1, linewidth=0)
+        ax.axvspan(*post_region(t, y, item, ABERRATION_FACTOR, TOLERANCE), color=color, alpha=0.1, linewidth=0)
         print(f"{edge.polarity.name:>7}: overshoot {item.post_overshoot.percent:5.2f} %, "
               f"undershoot {item.post_undershoot.percent:5.2f} %, settling time {item.settling_time * 1e3:6.1f} ms")
         for aberration, name, dy in ((item.post_overshoot, "overshoot", 12), (item.post_undershoot, "undershoot", -18)):
@@ -48,9 +49,6 @@ def main() -> None:
             ax.plot(aberration.instant, aberration.value, "v" if dy > 0 else "^", color=color, markersize=7)
             ax.annotate(f"{name} {aberration.percent:.1f} %", (aberration.instant, aberration.value),
                         xytext=(6, dy), textcoords="offset points", fontsize=8, color=color)
-        if not math.isfinite(item.settling_time):
-            ax.text(edge.end, 0.52, "  settling time NaN (not settled)", va="bottom", fontsize=8, color=color)
-            continue
         settle = edge.mid_instant + item.settling_time
         ax.annotate("", xy=(settle, 0.5), xytext=(edge.mid_instant, 0.5),
                     arrowprops={"arrowstyle": "<->", "color": color, "linewidth": 1.0})

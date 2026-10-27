@@ -16,14 +16,16 @@ import numpy as np
 import numpy.typing as npt
 
 import pulse_transitions as pt
-from _plot import ACCENT, FALLING, REFERENCE, RISING, SIGNAL, second_order_step, save
+from _plot import ACCENT, FALLING, REFERENCE, RISING, SIGNAL, post_region, second_order_step, save
 
 WN = 30.0  # natural frequency (rad/s); the step has settled well before t = 1
 ZETA = 0.2  # damping ratio
 NOISE_SIGMA = 0.005  # standard deviation of the added noise (V)
 LEVELS = (10.0, 50.0, 90.0)  # percent reference levels used for the rise time
 TOLERANCE = 2.0  # settling band, percent of the amplitude
-ABERRATION_FACTOR = 3.0  # post-transition region length, in edge durations
+# Post-transition region length in edge durations. The default, 3 (MATLAB's too), ends before the first
+# trough of this underdamped response, so the undershoot would be read at the region's end; 5 covers it.
+ABERRATION_FACTOR = 5.0
 
 
 def lowpass_if_available(y: npt.NDArray[np.float64]) -> npt.NDArray[np.float64]:
@@ -65,7 +67,7 @@ def main() -> None:
 
     ax.axvspan(edge.start, edge.end, color=RISING, alpha=0.15, linewidth=0,
                label=f"Rise time {edge.duration * 1e3:.1f} ms")
-    ax.axvspan(edge.end, edge.end + ABERRATION_FACTOR * edge.duration, color=FALLING, alpha=0.08, linewidth=0,
+    ax.axvspan(*post_region(t, y, step, ABERRATION_FACTOR, TOLERANCE), color=FALLING, alpha=0.08, linewidth=0,
                label="Post-transition aberration region")
     for aberration, name, dy, color in ((step.post_overshoot, "overshoot", 6, FALLING),
                                         (step.post_undershoot, "undershoot", -14, FALLING)):

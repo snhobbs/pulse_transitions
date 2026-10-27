@@ -35,7 +35,8 @@ tests/
 ├── test__plateau.py
 ├── test__api.py
 ├── test_matlab.py
-└── test_performance.py   # timing clauses §C22–§C24, skipped unless PT_PERF=1
+├── test_performance.py   # timing clauses §C22–§C24, skipped unless PT_PERF=1
+└── test_examples.py      # §C33 smoke test: every example script runs; skipped without matplotlib and scipy
 benchmarks/
 └── benchmark.py       # [simple]  prints v0.3 timings beside the v0.2 figures from the brief spec
 examples/
@@ -317,9 +318,13 @@ def step_metrics(...same parameters...) -> TransitionMetrics:
 
 For each transition with duration `d`, amplitude `A = high - low`, tolerance `tol = state_tolerance / 100 * A`, direction `s = +1` rising / `-1` falling, pre-state level `Lpre` (low when rising) and post-state level `Lpost`:
 
-- Pre region: `x` in `[start - aberration_factor*d, start]`, but not before the previous transition's `end` or the record's first sample. Post region: `[end, end + aberration_factor*d]`, not after the next transition's `start` or the last sample. Both inclusive.
-- **Overshoot** is the excursion past the region's state level _in the direction of travel_; **undershoot** is the excursion past it _against_ the direction of travel. Overshoot extreme: the sample maximising `s*y`; undershoot extreme: the sample minimising `s*y` (first on ties). `percent = 100 * |y_ext - L| / |A|` if the extreme is beyond `L ± tol` on that side, else `0.0`. `instant`, `value` are the extreme sample's, even when `percent` is 0.
-- **Settling time** (§5.3.7): band `Lpost ± tol`. Search samples from `start_index` up to (exclusive) the next transition's `start_index + 1`, or the end of the record. `k` = last sample outside the band. If `k` is the last sample searched: NaN (not settled). Otherwise interpolate the instant the waveform crosses the band edge nearest `y[k]` between samples `k` and `k+1`; settling time = that instant − `mid_instant`.
+- (rev 6) Each region is anchored at a sample that is in its state, not at a reference crossing (IEEE 181 anchors them at the first/last sampled instant in the state):
+  - **Post anchor** `p` (rev 7): the first index from `end_index` up to the next transition's `start_index` (or the last sample) that has reached the post-state level, `s*(y[p] - Lpost) >= 0`; if none does, the first that has reached its band, `s*(y[p] - Lpost) >= -tol`. Overshoot past the level counts as reached.
+  - **Pre anchor** `q` (rev 7): the last index from the previous transition's `end_index` (or 0) up to `start_index` still at or before the pre-state level, `s*(y[q] - Lpre) <= 0`; if none is, the last still in its band, `s*(y[q] - Lpre) <= tol`.
+  - Pre region: `x` in `[x[q] - aberration_factor*d, x[q]]`, but not before the previous transition's post anchor or the record's first sample. Post region: `[x[p], x[p] + aberration_factor*d]`, not after the next transition's pre anchor or the last sample. Both inclusive.
+  - A region always holds its anchor; it is empty only when its anchor doesn't exist (the waveform never reaches the state before the neighbouring transition).
+- **Overshoot** is the excursion past the region's state level _in the direction of travel_; **undershoot** is the excursion past it _against_ the direction of travel. Overshoot extreme: the sample maximising `s*y`; undershoot extreme: the sample minimising `s*y` (first on ties). (rev 7) `percent = 100 * e / |A|` where `e` is how far the extreme passes `L` on that side (`s*(y_ext - L)` for overshoot, `-s*(y_ext - L)` for undershoot), or `0.0` if it doesn't pass `L`. Every real excursion is reported, however small; noise peaks are excursions too, so filter noisy data first. `instant`, `value` are the extreme sample's, even when `percent` is 0.
+- **Settling time** (§5.3.7, rev 6): band `Lpost ± tol`. Search samples from `start_index` up to and including the next transition's pre anchor, or the last sample when there is no next transition; NaN when the next transition has no pre anchor. `k` = last sample outside the band. If `k` is the last sample searched: NaN (not settled). Otherwise interpolate the instant the waveform crosses the band edge nearest `y[k]` between samples `k` and `k+1`; settling time = that instant − `mid_instant`.
 
 ```python
 y = [0, 0, 0, 1.2, 1.0, 1.0, 0.9, 1.0, 1.0, 1.0, 1.0, 1.0]     # x = 0..11
@@ -332,7 +337,7 @@ m.pre_undershoot      # → Aberration(percent=0.0, instant=1.0, value=0.0)
 m.settling_time       # → 4.3833333333  (last out-of-band sample x=6 (0.9), band edge 0.98 crossed at 6.8)
 ```
 
-Post region is `[2.75, 4.75]` (samples 3, 4); the 0.9 at x=6 equals the upper reference level, so it is still the high state and starts no new transition.
+Post anchor is sample 3 (1.2 has reached the high state), so the post region is `[3, 5]` (samples 3, 4, 5). Pre anchor is sample 2; `3d` is 2 to within rounding, so the pre region starts at or just above x=0 and the extremes are reported at the first sample it holds (x=1 in double precision). The 0.9 at x=6 equals the upper reference level, so it is still the high state and starts no new transition.
 
 ```python
 step_metrics([1 - v for v in y], levels=(0, 1)).post_overshoot   # → Aberration(percent=20.0, instant=3.0, value=-0.2)  (falling: overshoot is below low)
@@ -342,6 +347,29 @@ step_metrics([0, 0, 1, 1, 1, 0, 0], levels=(0, 1))                 # raises Edge
 step_metrics([0, 0, 1, 1, 1, 0, 0], levels=(0, 1), bounds=(0, 3)).transition.mid_instant   # → 1.5
 step_metrics([0, 0, 1, 1], levels=(0, 1), aberration_factor=0)    # raises InputError  (§E15)
 transition_metrics([0, 0, 0, 1, 1, 1.5], levels=(0, 1))[0].settling_time   # → NaN (last sample out of band)
+```
+
+Rev 6 examples, sloped edges (x = 0..n-1):
+
+```python
+m = step_metrics([0, 0, 0, 0.5, 0.9, 0.95, 0.99, 1, 1, 1], levels=(0, 1))   # monotonic: no aberrations
+m.post_undershoot     # → Aberration(percent=0.0, instant=7.0, value=1.0)   (rev 7: post anchor 7, the first sample at the level)
+m.post_overshoot      # → Aberration(percent=0.0, instant=7.0, value=1.0)
+m.pre_overshoot       # → Aberration(percent=0.0, instant=0.0, value=0.0)
+m.settling_time       # → 2.75  (last out-of-band sample x=5 (0.95), 0.98 crossed at 5.75, minus mid 3.0)
+
+r, f = transition_metrics([0, 0, 0.5, 1, 1, 1, 0.95, 0.5, 0, 0], levels=(0, 1))
+r.settling_time       # → 0.96  (search ends at the falling edge's pre anchor, sample 5; 0.98 crossed at 2.96, minus mid 2.0)
+r.post_undershoot     # → Aberration(percent=0.0, instant=3.0, value=1.0)   (region ends at sample 5, before the 0.95)
+f.settling_time       # → 0.96  (0.02 crossed at 7.96, minus mid 7.0)
+f.pre_overshoot       # → Aberration(percent=0.0, instant=3.0, value=1.0)   (pre region starts at the rising edge's post anchor, sample 3)
+
+step_metrics([0, 0, 0, 1.01, 1, 1, 1, 1, 1, 1], levels=(0, 1)).post_overshoot   # → Aberration(percent=1.0, instant=3.0, value=1.01)  (rev 7: inside the 2 % band, still reported)
+step_metrics([0, 0, 0, 0.99, 0.99, 0.99], levels=(0, 1)).post_undershoot        # → Aberration(percent=1.0, instant=3.0, value=0.99)  (rev 7: never reaches 1.0, so the anchor falls back to the band, sample 3)
+
+g = step_metrics([0, 0, 0, 0.95, 0.95, 0.95], levels=(0, 1))   # never reaches the 0.98 boundary
+g.post_overshoot      # → Aberration(nan, nan, nan)  (no post anchor: empty region, §C14)
+g.pre_overshoot       # → Aberration(percent=0.0, instant=0.0, value=0.0)
 ```
 
 ### `pulses`
@@ -558,9 +586,9 @@ ValueError
 - **§C11** Shifting `x → x + c` shifts every instant by `c` and leaves durations unchanged.
 - **§C12** Accuracy: a linear ramp gives exact instants (relative 1e-9) whatever its sub-sample position (offsets 0, 0.25, 0.5, 0.77 of a sample). An RC step `1 - exp(-t/τ)` gives a 10–90 duration of `τ·ln 9` within 1 % at 50 samples per τ and within 0.2 % at 200.
 - **§C13** Histogram levels: `mode` is the mean of the samples in the modal bin of each sub-histogram (first bin on ties); `mean` is the mean of all samples in each sub-histogram. For a two-level signal with additive noise σ ≤ 2 % of the amplitude and each state ≥ 20 % of the record, `mode` levels are within 1 % of the amplitude of the true levels.
-- **§C14** Aberration regions as defined under `transition_metrics`: inclusive, clipped at neighbouring transitions and the record ends. An empty region gives `Aberration(nan, nan, nan)`.
-- **§C15** Overshoot is the excursion in the direction of travel, undershoot against it, both as positive percentages of `|A|`; `percent` is 0.0 unless the extreme passes `L ± tol`.
-- **§C16** Settling time is measured from `mid_instant`, within the transition's own interval (up to the next transition); NaN if the last searched sample is still out of band.
+- **§C14** (rev 7) Aberration regions as defined under `transition_metrics`: anchored at the first sample that has reached the post-state level (else its band) and the last sample still at the pre-state level (else in its band), inclusive, clipped at the neighbouring transitions' anchors and the record ends. A region always holds its anchor; with no anchor it is empty and gives `Aberration(nan, nan, nan)`.
+- **§C15** (rev 7) Overshoot is the excursion in the direction of travel, undershoot against it, both as positive percentages of `|A|`; `percent` is the actual excursion past `L`, however small, and 0.0 only when the extreme doesn't pass `L`. `state_tolerance` no longer affects aberrations; it sets the state boundaries for the anchors and the settling band.
+- **§C16** (rev 6) Settling time is measured from `mid_instant`, within the transition's own interval: up to and including the next transition's pre anchor, so the next edge's departure is never counted as unsettled; NaN if the last searched sample is still out of band or the next transition has no pre anchor.
 - **§C17** Pulses: width, period, separation and duty cycle use mid instants. The last pulse (no following same-polarity transition) has NaN period, separation and duty cycle. A pulse never spans more than two transitions.
 - **§C18** `measure_edge` finds an edge of any length from 1 sample to `n/10` samples, provided its height is at least 10 × the noise σ and at least 10 % of the largest edge in the record. Densely sampled slow edges are found: a 1e6-sample trace with one 2000-sample edge of height 1 and noise σ = 0.01 (seed 0) is measured with a 10–90 duration within 1 % of the noiseless value.
 - **§C19** `measure_edge` levels are medians of the flat parts adjacent to the edge (step 4 of its algorithm), so a staircase with several levels measures each step between its own levels.
@@ -568,8 +596,9 @@ ValueError
 - **§C21** `flatness` uses the population std-dev (`ddof=0`) and the last 10 samples of the whole (unbounded) record for normalisation.
 - **§C22** Performance: `transitions` on a 1e6-sample, 20-transition pulse train with 1 % noise and given levels takes ≤ 100 ms (v0.2 `detect_edges`: 1009 ms). Test skipped unless `PT_PERF=1`.
 - **§C23** Scaling: `transitions` time for 1e6 samples ≤ 15 × its time for 1e5 samples (same signal shape). Skipped unless `PT_PERF=1`.
-- **§C24** `state_levels` on 1e6 samples ≤ 20 ms (v0.2: 14 ms). Skipped unless `PT_PERF=1`.
+- **§C24** (rev 8) `state_levels` on 1e6 samples ≤ 40 ms (v0.2: 14 ms; v0.3 measures 20–31 ms). Skipped unless `PT_PERF=1`.
 - Stage 3 of the pipeline runs `tests/test_performance.py` with `PT_PERF=1` on the machine the v0.2 figures were measured on and records the timings in `docs/spec/pipeline-log.md`; a miss there is a failure, not a skip.
+- **§C33** (rev 8) Every script in `examples/` (not `_plot.py`) runs to completion and writes its figure. The smoke test writes the figures to a temporary directory (`PT_FIGURES`), so it never touches `examples/figures/`, and is skipped when matplotlib or scipy is missing; the library itself still needs only numpy (D5).
 - **§C25** No Python loop over samples anywhere in the package; loops over transitions, runs, scales or bins are fine. (Checked by §C22–§C24 and review.)
 - **§C26** All result types are frozen dataclasses; array fields don't take part in equality.
 - **§C27** The `matlab` facade adds no logic: each function's values equal those from the corresponding Pythonic call with the same levels and reference.
@@ -577,6 +606,8 @@ ValueError
 - **§C29** `transitions`, `transition_metrics` and `pulses` return `()` when there is nothing to report; only `step_metrics` and `measure_edge` raise for a missing edge.
 - **§C30** `benchmarks/benchmark.py` runs with `PYTHONPATH=src python benchmarks/benchmark.py`, uses the brief spec's pulse-train generator (10 periods, 20 edges, 1 % noise, seed 0, best of 3) at 1e4, 1e5, 1e6 samples, and prints v0.3 timings for `state_levels`, `transitions`, `step_metrics` and `measure_edge(around=0.2)` beside the v0.2 figures.
 - **§C31** (rev 5) `mid_method="fit"` accuracy (`_transitions.py`). Exact (relative 1e-9) on a linear ramp at sub-sample offsets 0, 0.25, 0.5, 0.77, as §C12. On a noisy linear edge — `x = arange(4200)`, `y = clip((x - 1600) / 1000, 0, 1) + normal(0, 0.02)`, true mid instant 2100, levels `(0, 1)`, seeds 0–49 (`numpy.random.default_rng(seed)`) — every seed gives exactly one transition, and the RMS error of the fitted mid instant is ≤ 0.2 % of the 1000-sample rise and ≤ half the RMS error of the median crossing on the same records. Prototype: fit RMS 0.077 %, median 0.47 %, first 2.95 %, no fallbacks. Not a timing clause, but `transitions(..., mid_method="fit")` on the §C22 signal must also meet §C22's 100 ms (prototype: fit adds 0.5 ms to 57 ms).
+
+- **§C32** (rev 7) A monotonic edge has no aberrations: on a sampled RC step `y = 1 - exp(-x)` for `x > 0`, else 0 (`x = linspace(-1, 10, 5000)`, levels detected), all four aberrations are below 0.25 % (what remains is the detected level's offset from where the record ends), and the post-undershoot is 0.0. A transition followed by another settles: on a noiseless pulse train of second-order edges (`y = step(x - 0.2) - step(x - 1.1)` with `step` the unit second-order step response, `wn = 40`, `zeta = 0.3`, `x = linspace(0, 2, 8000)`, levels detected), both settling times are finite and agree within 1 % (the edges are mirror images). Prototype (rev 6): RC all 0 %, post-undershoot at 0.9997 tol from high (the anchor sits just inside the band); pulse settling 251.42 ms and 251.36 ms. Rev 5 code: RC post-undershoot 9.99 %, pre-overshoot 9.95 %; rising settling NaN. Prototype (rev 7): RC 0.0, 0.006, 0.18, 0.0 % (pre-over, pre-under, post-over, post-under); a rev 6 anchor at the band edge would read up to 2 % of approach as post-undershoot, hence the level-first anchors.
 
 ## Calling interface
 
@@ -608,7 +639,7 @@ durations, lower, upper, ll, ul = matlab.risetime(y, t)
 
 - D1. Public functions take `y` first and everything else keyword-only (`x=`, `fs=`), so a v0.2-style `f(x, y)` call raises `TypeError` instead of silently swapping axes. The `matlab` facade keeps MATLAB's positional `(y, t)`.
 - D2. The histogram `mode` level is the mean of the samples in the modal bin, not the bin centre (IEEE allows mode or mean; MATLAB uses the bin centre), so clean levels come out exact.
-- D3. Overshoot is measured in the direction of travel and undershoot against it, for both regions and both polarities. The state boundary for the "else 0" rule is `L ± state_tolerance` (2 %), the band also used for settling.
+- D3. Overshoot is measured in the direction of travel and undershoot against it, for both regions and both polarities. (Rev 7, D14: the "else 0 inside `L ± state_tolerance`" rule is withdrawn.)
 - D4. `step_metrics` requires exactly one transition in the analysed data and raises `EdgeNotFoundError` otherwise (§E10); `bounds` selects the step.
 - D5. scipy is dropped; numpy is the only runtime dependency. `CrossingDetectionSettings` and its pre-filter are gone; hysteresis between the reference levels rejects noise. The example shows filtering with scipy before measuring, for users who want it.
 - D6. Exception hierarchy under `PulseTransitionsError(ValueError)`; `EdgeNotFoundError` is no longer an `IndexError`.
@@ -618,6 +649,8 @@ durations, lower, upper, ll, ul = matlab.risetime(y, t)
 - D10. Timing clauses §C22–§C24 are skipped unless `PT_PERF=1`; stage 3 must run them with it set and treats a miss as a failure.
 - D11. The mid instant is the median of the mid-level crossings within the transition by default; `mid_method="first"` gives §5.3.3's stated default. Rev 5 adds the least-squares `"fit"` method (`transitions` step 5); the default stays `"median"`, because the fit is biased on curved edges.
 - D12. `matlab.pulseperiod`, `pulsesep` and `dutycycle` return only pulses with a complete period, and the overshoot/undershoot functions report the post-transition region (MATLAB's defaults).
+- D14. (Rev 7, confirmed 2026-10-27) Aberrations report the actual excursion past the state level, however small. The old rule zeroed anything inside the ±2 % band, so the photoreceiver example's real 1.3–1.9 % overshoots read 0.0 % (examples/photoreceiver_pulse.py). Noise peaks now count, as in MATLAB; filter first.
+- D15. (Rev 8, user 2026-10-27) §C24's limit is relaxed from 20 ms to 40 ms rather than speeding up `_levels`: v0.3 measures 20–31 ms on the reference machine, and the 20 ms limit failed on every run.
 - D13. (Rev 5, confirmed 2026-10-27) `mid_method="fit"` fits samples `start_index .. end_index`, clamps the instant to `[start, end]`, falls back to the median crossing (recorded as `"median"`) when the slope is non-finite or has the wrong sign, and is not the default.
 
 ## Revisions
@@ -643,3 +676,19 @@ Modules affected: _multilevel.py
 Reason: planned loop-back from D11: add `mid_method="fit"`, a least-squares mid instant for noisy near-linear edges.
 Added: §C31; `transitions` algorithm step 5   Changed: §C7, §E15 (rev 5); `Transition.mid_method` values; `transitions` examples (`"fit"` no longer raises; `"slope"` does)   Withdrawn: none
 Modules affected: _transitions.py (fit), _api.py and matlab.py (accept `"fit"`), _types.py (comment only)
+
+### Rev 6 — 2026-10-27
+Reason: bugs found in use by the example figures. Regions anchored at the reference crossings made a monotonic RC step report 10 % post-undershoot and pre-overshoot (the 90 %/10 % samples counted as aberrations); the settling search ran into the next edge's first samples, so every transition but the last read NaN.
+Added: §C32; rev 6 worked examples under `transition_metrics`   Changed: §C14, §C16 (rev 6); `transition_metrics` region and settling bullets   Withdrawn: none
+Knock-on: the old §C14 empty-region test (tiny `aberration_factor`) no longer gives an empty region, since a region always holds its anchor; it moves to the no-anchor case.
+Modules affected: _aberrations.py (matlab.py overshoot/undershoot/settlingtime follow through it unchanged)
+
+### Rev 7 — 2026-10-27
+Reason: user decision D14. The "else 0" rule zeroed every excursion inside the ±2 % band, so the photoreceiver example's measured 1.3–1.9 % overshoots read 0.0 %. Aberrations now report the actual excursion. Rev 6's band-edge anchors would then read up to 2 % of a monotonic approach as undershoot, so anchors go to the level first, the band as fallback.
+Added: rev 7 within-band example   Changed: §C14, §C15, §C32 (rev 7); D3; anchor and percent bullets; rev 6 monotonic example (post anchor 7)   Withdrawn: the "else 0" rule (D3)
+Modules affected: _aberrations.py
+
+### Rev 8 — 2026-10-27
+Reason: user decisions. §C24 failed on every `PT_PERF=1` run (20–31 ms against 20 ms), and the user relaxed it rather than speed up `_levels` (D15). The user also asked for the examples to run as a smoke test; three new examples compare measured step metrics against the closed-form second-order response (damping, noise, sampling).
+Added: §C33, D15; `tests/test_examples.py` in the layout   Changed: §C24 (rev 8)   Withdrawn: none
+Modules affected: none in the library; tests/test_performance.py, tests/test_examples.py, examples/_plot.py (`PT_FIGURES`)

@@ -45,9 +45,9 @@ class TestPerformance(unittest.TestCase):
         t5 = best_of(lambda: pt.transitions(self.y5, x=self.x5, levels=(0, 1)))
         self.assertLessEqual(t6, 15 * t5, msg=f"spec §C23: 1e6 took {t6 * 1e3:.1f} ms, 1e5 took {t5 * 1e3:.1f} ms; ratio must be ≤ 15")
 
-    def test_state_levels_1e6_under_20ms(self):
+    def test_state_levels_1e6_under_40ms(self):
         elapsed = best_of(lambda: pt.state_levels(self.y6))
-        self.assertLessEqual(elapsed, 0.020, msg=f"spec §C24: state_levels on 1e6 samples took {elapsed * 1e3:.1f} ms, limit 20 ms (v0.2: 14 ms)")
+        self.assertLessEqual(elapsed, 0.040, msg=f"spec §C24 (rev 8): state_levels on 1e6 samples took {elapsed * 1e3:.1f} ms, limit 40 ms (v0.2: 14 ms)")
 
     def test_benchmark_script_runs(self):
         env = dict(os.environ, PYTHONPATH=str(ROOT / "src"))

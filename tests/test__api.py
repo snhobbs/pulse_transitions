@@ -179,6 +179,40 @@ class TestStepAndTransitionMetrics(unittest.TestCase):
                         msg="spec §C16 example: not settled → NaN")
 
 
+class TestAnchoredRegions(unittest.TestCase):
+    """§C32 (rev 6): aberration regions anchored in the states; settling up to the next edge's pre anchor."""
+
+    @staticmethod
+    def second_order_step(x, wn=40.0, zeta=0.3):
+        wd = wn * math.sqrt(1 - zeta**2)
+        xp = np.clip(x, 0.0, None)
+        y = 1 - np.exp(-zeta * wn * xp) / math.sqrt(1 - zeta**2) * np.sin(wd * xp + math.acos(zeta))
+        return np.where(x >= 0, y, 0.0)
+
+    def test_rc_step_has_no_aberrations(self):
+        x = np.linspace(-1, 10, 5000)
+        y = np.where(x > 0, 1 - np.exp(-np.clip(x, 0, None)), 0.0)
+        m = pt.step_metrics(y, x=x)
+        for name in ("pre_overshoot", "pre_undershoot", "post_overshoot", "post_undershoot"):
+            with self.subTest(case=name):
+                self.assertLess(getattr(m, name).percent, 0.25,
+                                msg=f"spec §C32 (rev 7): a monotonic RC step has no aberrations beyond the level estimate's "
+                                    f"offset (< 0.25 %); {name} is {getattr(m, name)!r}")
+        self.assertEqual(m.post_undershoot.percent, 0.0,
+                         msg=f"spec §C32 (rev 7): the approach is never an undershoot; got {m.post_undershoot!r}")
+
+    def test_pulse_train_edges_both_settle(self):
+        x = np.linspace(0, 2, 8000)
+        y = self.second_order_step(x - 0.2) - self.second_order_step(x - 1.1)
+        rising, falling = pt.transition_metrics(y, x=x)
+        for name, m in (("rising", rising), ("falling", falling)):
+            with self.subTest(case=name):
+                self.assertTrue(math.isfinite(m.settling_time),
+                                msg=f"spec §C32/§C16 (rev 6): the {name} edge settles; got {m.settling_time!r}")
+        self.assertAlmostEqual(rising.settling_time, falling.settling_time, delta=0.01 * falling.settling_time,
+                               msg=f"spec §C32: mirror-image edges settle alike; got {rising.settling_time!r} and {falling.settling_time!r}")
+
+
 class TestPulses(unittest.TestCase):
     def test_pulses_examples(self):
         positive = pt.pulses(SQUARE, levels=(0, 1))
