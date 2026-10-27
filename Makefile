@@ -9,7 +9,7 @@ FIGURES := $(patsubst examples/%.py,examples/figures/%.svg,$(EXAMPLES))
 LIBRARY := $(wildcard src/pulse_transitions/*.py)
 DATA := $(wildcard examples/data/*.csv)
 
-.PHONY: all examples test clean-examples
+.PHONY: all examples test lint format clean-examples
 
 all: examples
 
@@ -20,6 +20,13 @@ examples/figures/%.svg: examples/%.py examples/_plot.py $(LIBRARY) $(DATA)
 
 test:
 	$(RUN) -m unittest discover -s tests -t .
+
+lint:
+	ruff check
+	ruff format --check
+
+format:
+	ruff format
 
 clean-examples:
 	rm -f $(FIGURES)

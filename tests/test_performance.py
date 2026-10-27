@@ -8,7 +8,6 @@ import unittest
 from pathlib import Path
 
 import pulse_transitions as pt
-
 from tests.signals import pulse_train
 
 PERF = unittest.skipUnless(

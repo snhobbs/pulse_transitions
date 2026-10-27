@@ -11,8 +11,8 @@ from __future__ import annotations
 import matplotlib.pyplot as plt
 import numpy as np
 
-from pulse_transitions import matlab
 from _plot import ACCENT, FALLING, RISING, SIGNAL, ramp_edges, save
+from pulse_transitions import matlab
 
 
 def main() -> None:

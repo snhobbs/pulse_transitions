@@ -23,8 +23,8 @@ from _plot import (
     RISING,
     SIGNAL,
     post_region,
-    second_order_step,
     save,
+    second_order_step,
 )
 
 WN = 30.0  # natural frequency (rad/s); the step has settled well before t = 1

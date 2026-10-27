@@ -285,7 +285,9 @@ pip install https://github.com/snhobbs/pulse_transitions/archive/refs/tags/<TAGN
 ### From Source
 ```bash
 git clone https://github.com/snhobbs/pulse_transitions/
-pip install .
+pip install .               # numpy is the only dependency
+pip install ".[examples]"   # adds matplotlib and scipy for the example scripts
+pip install ".[test]"       # adds pytest and ruff too
 ```
 
 ## Tests
@@ -294,6 +296,7 @@ make test                                       # or: pytest
 PYTHONPATH=src python -m unittest discover -s tests -t . -v
 PT_PERF=1 PYTHONPATH=src python -m unittest tests.test_performance -v   # timing tests
 PYTHONPATH=src python benchmarks/benchmark.py
+make lint                                       # ruff check and ruff format --check, as CI runs them
 ```
 
 `tests/test_examples.py` runs every example script as a smoke test, writing the figures to a temporary directory;

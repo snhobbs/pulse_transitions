@@ -19,7 +19,7 @@ class TestReferenceLevels(unittest.TestCase):
                 self.assertEqual(
                     len(result), 3, msg=f"spec §5.3.2: three levels, got {result!r}"
                 )
-                for got, want in zip(result, expected):
+                for got, want in zip(result, expected, strict=True):
                     self.assertAlmostEqual(
                         got,
                         want,

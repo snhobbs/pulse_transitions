@@ -7,7 +7,6 @@ import numpy as np
 
 from pulse_transitions._aberrations import metrics_for
 from pulse_transitions._types import Aberration, Polarity, Transition, TransitionMetrics
-
 from tests.signals import (
     OVERSHOOT,
     OVERSHOOT_FALLING_T,

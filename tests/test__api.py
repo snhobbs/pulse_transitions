@@ -16,7 +16,6 @@ from pulse_transitions import (
     StateLevels,
     Transition,
 )
-
 from tests.signals import (
     DITHER,
     NOISY_MID,
@@ -30,7 +29,9 @@ from tests.signals import (
 
 class TestReferenceLevels(unittest.TestCase):
     def test_reference_levels_default(self):
-        for got, want in zip(pt.reference_levels((0.0, 2.0)), (0.2, 1.0, 1.8)):
+        for got, want in zip(
+            pt.reference_levels((0.0, 2.0)), (0.2, 1.0, 1.8), strict=True
+        ):
             self.assertAlmostEqual(
                 got,
                 want,
@@ -46,7 +47,7 @@ class TestReferenceLevels(unittest.TestCase):
 
 
 class TestStateLevels(unittest.TestCase):
-    Y = [0, 0, 0, 0, 1, 1, 1, 1, 1, 0.5]
+    Y = (0, 0, 0, 0, 1, 1, 1, 1, 1, 0.5)
 
     def test_state_levels_examples(self):
         cases = {
@@ -116,7 +117,7 @@ class TestTransitions(TransitionAsserts, unittest.TestCase):
             4,
             msg="spec transitions example: detected levels are exactly (0, 1) (D2)",
         )
-        for got, want in zip(result, SQUARE_TRANSITIONS):
+        for got, want in zip(result, SQUARE_TRANSITIONS, strict=True):
             self.assertTransition(
                 got, want, "spec transitions example with detected levels"
             )
@@ -136,7 +137,9 @@ class TestTransitions(TransitionAsserts, unittest.TestCase):
             2,
             msg=f"spec transitions example: polarity=FALLING keeps the 2nd and 4th; got {result!r}",
         )
-        for got, want in zip(result, (SQUARE_TRANSITIONS[1], SQUARE_TRANSITIONS[3])):
+        for got, want in zip(
+            result, (SQUARE_TRANSITIONS[1], SQUARE_TRANSITIONS[3]), strict=True
+        ):
             self.assertTransition(
                 got, want, "spec transitions example: polarity=FALLING"
             )
@@ -251,12 +254,14 @@ class TestTransitions(TransitionAsserts, unittest.TestCase):
             "step_metrics",
             "pulses",
         ):
-            with self.subTest(case=name):
-                with self.assertRaises(
+            with (
+                self.subTest(case=name),
+                self.assertRaises(
                     TypeError,
                     msg=f"spec D1 / §E14: {name}(y, x) positional must raise TypeError",
-                ):
-                    getattr(pt, name)(SQUARE, x)
+                ),
+            ):
+                getattr(pt, name)(SQUARE, x)
 
 
 class TestStepAndTransitionMetrics(unittest.TestCase):

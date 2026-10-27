@@ -50,7 +50,7 @@ def _steep_runs(y: np.ndarray, scale: int, floor: float) -> list[Run]:
     starts, ends = edges[:-1], edges[1:] - 1
     keep = signed[starts] != 0
     runs: list[Run] = []
-    for first, last in zip(starts[keep], ends[keep]):
+    for first, last in zip(starts[keep], ends[keep], strict=True):
         sign = int(signed[first])
         span_end = int(last) + scale
         peak = float(magnitude[first : last + 1].max())

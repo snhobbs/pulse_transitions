@@ -6,7 +6,6 @@ import numpy as np
 
 import pulse_transitions as pt
 from pulse_transitions import InputError, Polarity, matlab
-
 from tests.signals import OVERSHOOT
 
 Y = np.array([0, 0, 1, 1, 1, 0, 0, 1, 1, 1, 0], dtype=float)
@@ -53,7 +52,7 @@ class TestMatlabExamples(unittest.TestCase):
         close([ll, ul], [0.1, 0.9], "spec matlab example: risetime reference levels")
 
     def test_falltime(self):
-        f, lt, ut, ll, ul = matlab.falltime(Y)
+        f, lt, ut, _ll, _ul = matlab.falltime(Y)
         close(f, [0.8, 0.8], "spec matlab: falltime durations")
         close(lt, [4.9, 9.9], "spec matlab: falltime lower-level instants")
         close(ut, [4.1, 9.1], "spec matlab: falltime upper-level instants")

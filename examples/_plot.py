@@ -15,10 +15,10 @@ import matplotlib
 
 matplotlib.use("Agg")
 
-import matplotlib.pyplot as plt  # noqa: E402
-import numpy as np  # noqa: E402
-import numpy.typing as npt  # noqa: E402
-from matplotlib.figure import Figure  # noqa: E402
+import matplotlib.pyplot as plt
+import numpy as np
+import numpy.typing as npt
+from matplotlib.figure import Figure
 
 # PT_FIGURES redirects the figures, so the smoke test (tests/test_examples.py) leaves examples/figures alone.
 FIGURES = Path(

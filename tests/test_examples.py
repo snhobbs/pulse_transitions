@@ -46,7 +46,7 @@ class TestExamples(unittest.TestCase):
                 )
 
             with ThreadPoolExecutor(max_workers=os.cpu_count() or 2) as pool:
-                results = dict(zip(EXAMPLES, pool.map(run, EXAMPLES)))
+                results = dict(zip(EXAMPLES, pool.map(run, EXAMPLES), strict=True))
             for script, result in results.items():
                 with self.subTest(example=script.name):
                     self.assertEqual(

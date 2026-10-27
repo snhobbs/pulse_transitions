@@ -16,32 +16,26 @@ classifiers = [
 description = "Pulse and transition metrics (IEEE Std 181-2003) with a MATLAB-named interface"
 keywords = []
 readme = "README.md"
-dynamic = ["dependencies"]
-license = "LGPL-2.1"
+dependencies = ["numpy>=1.24"]
+license = "LGPL-2.1-only"
 license-files = ["LICENSE"]
 
-[project.scripts]
+[project.optional-dependencies]
+examples = ["matplotlib>=3.7", "scipy>=1.10"]
+test = ["pytest>=7", "ruff>=0.14", "pulse_transitions[examples]"]  # the examples smoke test runs them
 
 [project.urls]
 github = 'https://github.com/snhobbs/pulse_transitions'
 
-[tool.setuptools]
-include-package-data = true
-
-[tool.setuptools.dynamic]
-dependencies = { file = ["requirements.txt"] }
-
-[tool.hatch.metadata]
-allow-direct-references = true
-
 [tool.setuptools.packages.find]
 where = ['src']
 
+[tool.setuptools.package-data]
+pulse_transitions = ["py.typed"]
+
 [build-system]
-requires = [
-	"setuptools>=77",      # for the license expression above (PEP 639)
-	"setuptools-scm>=8.0",
-]
+requires = ["setuptools>=77"]  # for the license expression above (PEP 639)
+build-backend = "setuptools.build_meta"
 
 
 # ==== pytest ====
@@ -53,156 +47,55 @@ pythonpath = ["src"]
 # ==== Coverage ====
 [tool.coverage.run]
 include = ["src/**"]
-omit = ["*/migrations/*", "*/tests/*"]
+omit = ["*/tests/*"]
 
 # ==== mypy ====
 [tool.mypy]
-python_version = "3.12"
+python_version = "3.10"
 check_untyped_defs = true
 ignore_missing_imports = true
 warn_unused_ignores = true
 warn_redundant_casts = true
 warn_unused_configs = true
-plugins = []
-
-[[tool.mypy.overrides]]
-ignore_errors = true
 
 
-# ==== djLint ====
-[tool.djlint]
-blank_line_after_tag = "load,extends"
-close_void_tags = true
-format_css = true
-format_js = true
-# TODO: remove T002 when fixed https://github.com/Riverside-Healthcare/djLint/issues/687
-ignore = "H006,H030,H031,T002"
-include = "H017,H035"
-indent = 2
-max_line_length = 119
-
-[tool.djlint.css]
-indent_size = 2
-
-[tool.djlint.js]
-indent_size = 2
-
+# ==== ruff ====
 [tool.ruff]
-# Exclude a variety of commonly ignored directories.
-exclude = [
-	".bzr",
-	".direnv",
-	".eggs",
-	".git",
-	".git-rewrite",
-	".hg",
-	".mypy_cache",
-	".nox",
-	".pants.d",
-	".pytype",
-	".ruff_cache",
-	".svn",
-	".tox",
-	".venv",
-	"__pypackages__",
-	"_build",
-	"buck-out",
-	"build",
-	"dist",
-	"node_modules",
-	"venv",
-	"*/migrations/*.py",
-	"staticfiles/*",
-	"*.ipynb",
-]
 line-length = 88
 indent-width = 4
 target-version = "py310"  # matches requires-python
+extend-exclude = ["*.ipynb"]
 
 [tool.ruff.lint]
 select = [
-	"F",
-	"E",
-	"W",
-	"C90",
-	"I",
-	"N",
-	#"UP",
-	"YTT",
-	# "ANN", # flake8-annotations: we should support this in the future but 100+ errors atm
-	"ASYNC",
-	"S",
-	"BLE",
-	"FBT",
-	"B",
-	"A",
-	"COM",
-	"C4",
-	"DTZ",
-	"T10",
-	"DJ",
-	"EM",
-	"EXE",
-	"FA",
-	'ISC',
-	"ICN",
-	"G",
-	'INP',
-	'PIE',
-	"T20",
-	'PYI',
-	'PT',
-	"Q",
-	"RSE",
-	"RET",
-	"SLF",
-	"SLOT",
-	"SIM",
-	"TID",
-	"TCH",
-	"INT",
-	# "ARG", # Unused function argument
-	"PTH",
-	"ERA",
-	"PD",
-	"PGH",
-	"PL",
-	"TRY",
-	"FLY",
-	# "NPY",
-	# "AIR",
-	"PERF",
-	# "FURB",
-	# "LOG",
-	#"RUF"
+	"F",    # pyflakes
+	"E",    # pycodestyle errors
+	"W",    # pycodestyle warnings
+	"I",    # isort
+	"B",    # bugbear
+	"UP",   # pyupgrade
+	"C4",   # comprehensions
+	"SIM",  # simplifications
+	"NPY",  # numpy-specific
+	"PT",   # pytest style
+	"RUF",  # ruff-specific
 ]
 ignore = [
-	"PT027",
-	"PT009",
-	"PLR2004",
-	"N803",
-	"PLR0913",
-	"UP007",
-	"UP006",
-	"SLF001",
-	"S101",    # Use of assert detected https://docs.astral.sh/ruff/rules/assert/
-	"RUF012",  # Mutable class attributes should be annotated with `typing.ClassVar`
-	"SIM102",  # sometimes it's better to nest
-	"COM812",  # missing-trailing-comma recommended to remove
-	"ISC001",  # single-line-implicit-string-concatenation recommended to remove
-	"E501",    # line too long
-	"ERA001",  # commented out code
+	"C408",    # dict(color=..., ...) reads better than a literal for matplotlib keyword sets
+	"E501",    # line length is the formatter's job; long strings and comments are allowed
+	"PT009",   # the tests use unittest assertions
+	"PT027",   # and unittest's assertRaises
+	"RUF001",  # ambiguous unicode in strings: the plots use σ, τ, ω, ±, ×
+	"RUF002",  # ... and docstrings
+	"RUF003",  # ... and comments
 ]
-# Allow fix for all enabled rules (when `--fix`) is provided.
-fixable = ["ALL"]
-unfixable = []
-# Allow unused variables when underscore-prefixed.
-dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
+
+[tool.ruff.lint.isort]
+known-first-party = ["pulse_transitions", "_plot", "tests"]
 
 # ==== Formatting ====
 # Style: `ruff format` (Black-compatible) at the 88-column line-length above, the same as
-# the sibling labcore projects. Run `ruff format src tests examples benchmarks`; CI or a
-# pre-commit hook can check it with `ruff format --check`.
+# the sibling labcore projects. `make format` applies it; `make lint` (and CI) checks it.
 [tool.ruff.format]
 quote-style = "double"
 indent-style = "space"
@@ -210,5 +103,6 @@ skip-magic-trailing-comma = false
 line-ending = "lf"
 docstring-code-format = true  # format the worked examples in docstrings too
 
-[tool.ruff.lint.isort]
-force-single-line = true
+[tool.ruff.lint.per-file-ignores]
+"benchmarks/*" = ["B023"]  # each lambda is timed inside its own loop iteration
+"tests/*" = ["SIM117"]  # subTest wrapping assertRaises reads clearer nested

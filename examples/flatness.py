@@ -13,7 +13,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 import pulse_transitions as pt
-from _plot import ACCENT, FALLING, RISING, SIGNAL, second_order_step, save
+from _plot import ACCENT, FALLING, RISING, SIGNAL, save, second_order_step
 
 WINDOW = 0.1  # s
 

@@ -12,7 +12,6 @@ levels so the two photodiodes overlay; the panels zoom on the rising and falling
 from __future__ import annotations
 
 import matplotlib.pyplot as plt
-import numpy as np
 
 import pulse_transitions as pt
 from _plot import FALLING, RISING, load_csv, save

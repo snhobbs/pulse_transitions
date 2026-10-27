@@ -7,7 +7,6 @@ import numpy as np
 
 from pulse_transitions._multilevel import locate_and_measure
 from pulse_transitions._types import EdgeMeasurement, EdgeNotFoundError, Polarity
-
 from tests.signals import dense_noisy_edge, pulse_train, staircase
 
 REF = (10.0, 50.0, 90.0)
@@ -126,7 +125,7 @@ class TestLocateAndMeasure(unittest.TestCase):
             delta=0.0016,
             msg=f"spec measure_edge step 3 (rev 3): 10-90 % of a 0.02 edge ≈ 0.016 within 10 %; got {r.duration!r}",
         )
-        for got, want in zip(r.levels, (0.0, 1.0)):
+        for got, want in zip(r.levels, (0.0, 1.0), strict=True):
             self.assertAlmostEqual(
                 got,
                 want,

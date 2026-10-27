@@ -5,7 +5,6 @@ import unittest
 
 from pulse_transitions._pulses import make_pulses
 from pulse_transitions._types import Polarity, Pulse
-
 from tests.signals import SQUARE_T1, SQUARE_T2, SQUARE_T3, SQUARE_T4, SQUARE_TRANSITIONS
 
 

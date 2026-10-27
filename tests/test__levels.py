@@ -6,7 +6,6 @@ import numpy as np
 
 from pulse_transitions._levels import detect_levels
 from pulse_transitions._types import LevelError, StateLevels
-
 from tests.signals import two_level_noisy
 
 Y = np.array([0, 0, 0, 0, 1, 1, 1, 1, 1, 0.5])

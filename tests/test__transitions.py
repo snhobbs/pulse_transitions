@@ -1,12 +1,12 @@
 """Tests for pulse_transitions._transitions — derived from: pulse_transitions Expanded Spec (v0.3), transitions / §C5–§C12."""
 
+import itertools
 import unittest
 
 import numpy as np
 
 from pulse_transitions._transitions import find_transitions
 from pulse_transitions._types import Polarity, Transition
-
 from tests.signals import (
     DITHER,
     NOISY_MID,
@@ -36,7 +36,7 @@ class TestFindTransitionsExamples(TransitionAsserts, unittest.TestCase):
             4,
             msg=f"spec transitions example: SQUARE has 4 transitions, got {result!r}",
         )
-        for i, (got, want) in enumerate(zip(result, SQUARE_TRANSITIONS)):
+        for i, (got, want) in enumerate(zip(result, SQUARE_TRANSITIONS, strict=True)):
             with self.subTest(case=i):
                 self.assertTransition(got, want, "spec transitions example (SQUARE)")
                 self.assertEqual(
@@ -204,7 +204,7 @@ class TestMidMethodFit(TransitionAsserts, unittest.TestCase):
 
     def test_fit_square_train_equals_median(self):
         for i, (got, want) in enumerate(
-            zip(run(SQUARE, mid_method="fit"), SQUARE_TRANSITIONS)
+            zip(run(SQUARE, mid_method="fit"), SQUARE_TRANSITIONS, strict=True)
         ):
             with self.subTest(case=i):
                 self.assertTransition(
@@ -312,7 +312,9 @@ class TestMedianReferenceInstants(TransitionAsserts, unittest.TestCase):
         )
 
     def test_clean_edges_unchanged_by_state_levels(self):
-        for got, want in zip(run(SQUARE, state_levels=(0.0, 1.0)), SQUARE_TRANSITIONS):
+        for got, want in zip(
+            run(SQUARE, state_levels=(0.0, 1.0)), SQUARE_TRANSITIONS, strict=True
+        ):
             self.assertTransition(
                 got,
                 want,
@@ -333,7 +335,7 @@ class TestInvariants(unittest.TestCase):
         )
         polarities = [t.polarity for t in self.result]
         self.assertTrue(
-            all(a != b for a, b in zip(polarities, polarities[1:])),
+            all(a != b for a, b in itertools.pairwise(polarities)),
             msg=f"spec §C5: polarities alternate: {polarities}",
         )
         mids = [t.mid_instant for t in self.result]
@@ -368,7 +370,7 @@ class TestInvariants(unittest.TestCase):
             len(self.result),
             msg="spec §C10: a*y + b (a > 0) finds the same transitions",
         )
-        for got, want in zip(scaled, self.result):
+        for got, want in zip(scaled, self.result, strict=True):
             self.assertEqual(
                 got.polarity,
                 want.polarity,
@@ -389,7 +391,7 @@ class TestInvariants(unittest.TestCase):
             len(self.result),
             msg="spec §C10: a < 0 finds the same transitions",
         )
-        for got, want in zip(flipped, self.result):
+        for got, want in zip(flipped, self.result, strict=True):
             self.assertEqual(
                 int(got.polarity),
                 -int(want.polarity),
@@ -404,7 +406,7 @@ class TestInvariants(unittest.TestCase):
 
     def test_time_shift(self):
         shifted = run(self.y, x=self.x + 7.25)
-        for got, want in zip(shifted, self.result):
+        for got, want in zip(shifted, self.result, strict=True):
             self.assertAlmostEqual(
                 got.mid_instant,
                 want.mid_instant + 7.25,

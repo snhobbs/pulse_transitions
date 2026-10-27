@@ -15,7 +15,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 import pulse_transitions as pt
-from _plot import ACCENT, FALLING, RISING, SIGNAL, post_region, second_order_step, save
+from _plot import ACCENT, FALLING, RISING, SIGNAL, post_region, save, second_order_step
 
 TOLERANCE = 2.0  # percent of the amplitude
 # Post-transition region length in edge durations. The default, 3 (MATLAB's too), ends before the first

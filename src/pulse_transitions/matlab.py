@@ -9,7 +9,7 @@ import numpy as np
 from numpy.typing import ArrayLike
 
 from . import _api
-from ._types import Aberration, Polarity, Pulse, Transition
+from ._types import Aberration, Polarity, Pulse
 from ._validate import check_choice, check_reference
 
 __all__ = [

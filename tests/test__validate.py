@@ -57,7 +57,7 @@ class TestAsWaveform(unittest.TestCase):
                 )
                 self.assertArray(
                     yo,
-                    [1.0, 3.0] if case == "nan in y" else [1.0, 3.0],
+                    [1.0, 3.0],
                     f"spec §C1: NaN pairs dropped ({case})",
                 )
 
@@ -86,12 +86,14 @@ class TestAsWaveform(unittest.TestCase):
             "§E6 bounds nan": dict(y=[1, 2, 3], bounds=(0, math.nan)),
         }
         for case, kwargs in cases.items():
-            with self.subTest(case=case):
-                with self.assertRaises(
+            with (
+                self.subTest(case=case),
+                self.assertRaises(
                     InputError,
                     msg=f"spec {case}: as_waveform({kwargs!r}) must raise InputError",
-                ):
-                    as_waveform(**kwargs)
+                ),
+            ):
+                as_waveform(**kwargs)
 
     def test_as_waveform_error_names_argument(self):
         with self.assertRaises(InputError) as caught:
@@ -128,11 +130,13 @@ class TestCheckLevels(unittest.TestCase):
             (0.0,),
             "ab",
         ]:
-            with self.subTest(case=case):
-                with self.assertRaises(
+            with (
+                self.subTest(case=case),
+                self.assertRaises(
                     InputError, msg=f"spec §E4: levels {case!r} must raise InputError"
-                ):
-                    check_levels(case)
+                ),
+            ):
+                check_levels(case)
 
 
 class TestCheckReference(unittest.TestCase):

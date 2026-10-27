@@ -119,7 +119,7 @@ def state_levels(
     _, ys = as_waveform(y, x, fs, bounds)
     if method == "endpoints" and not (
         isinstance(endpoint_samples, int)
-        and 1 <= endpoint_samples
+        and endpoint_samples >= 1
         and 2 * endpoint_samples <= len(ys)
     ):
         msg = f"endpoint_samples must be between 1 and {len(ys) // 2} for {len(ys)} samples, not {endpoint_samples!r}"
