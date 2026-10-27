@@ -21,7 +21,9 @@ import numpy.typing as npt  # noqa: E402
 from matplotlib.figure import Figure  # noqa: E402
 
 # PT_FIGURES redirects the figures, so the smoke test (tests/test_examples.py) leaves examples/figures alone.
-FIGURES = Path(os.environ.get("PT_FIGURES", Path(__file__).resolve().parent / "figures"))
+FIGURES = Path(
+    os.environ.get("PT_FIGURES", Path(__file__).resolve().parent / "figures")
+)
 DATA = Path(__file__).resolve().parent / "data"
 
 SIGNAL = "#4a5568"  # the waveform
@@ -57,7 +59,9 @@ def second_order_step(t: FloatArray, wn: float, zeta: float) -> FloatArray:
     """Unit step response of an underdamped second-order system, zero for t < 0."""
     wd = wn * np.sqrt(1.0 - zeta**2)
     tp = np.clip(t, 0.0, None)
-    y = 1.0 - np.exp(-zeta * wn * tp) / np.sqrt(1.0 - zeta**2) * np.sin(wd * tp + np.arccos(zeta))
+    y = 1.0 - np.exp(-zeta * wn * tp) / np.sqrt(1.0 - zeta**2) * np.sin(
+        wd * tp + np.arccos(zeta)
+    )
     return np.where(t >= 0.0, y, 0.0)
 
 
@@ -72,7 +76,9 @@ class SecondOrderExact:
     settling_time: float  # from the mid instant to the last entry into the tolerance band, as the library measures it
 
 
-def second_order_exact(wn: float, zeta: float, state_tolerance: float = 2.0) -> SecondOrderExact:
+def second_order_exact(
+    wn: float, zeta: float, state_tolerance: float = 2.0
+) -> SecondOrderExact:
     """The exact metrics of `second_order_step`: the peaks in closed form, the crossings by root finding."""
     from scipy.optimize import brentq
 
@@ -81,7 +87,11 @@ def second_order_exact(wn: float, zeta: float, state_tolerance: float = 2.0) -> 
         grid = np.linspace(after, after + 200.0 / (zeta * wn), 20_001)
         above = second_order_step(grid, wn, zeta) >= level
         k = int(np.flatnonzero(above != above[0])[0])
-        return brentq(lambda t: second_order_step(np.array([t]), wn, zeta)[0] - level, grid[k - 1], grid[k])
+        return brentq(
+            lambda t: second_order_step(np.array([t]), wn, zeta)[0] - level,
+            grid[k - 1],
+            grid[k],
+        )
 
     peak = np.exp(-np.pi * zeta / np.sqrt(1.0 - zeta**2))
     tol = state_tolerance / 100
@@ -95,7 +105,9 @@ def second_order_exact(wn: float, zeta: float, state_tolerance: float = 2.0) -> 
         level = 1.0 + tol if n % 2 else 1.0 - tol
         last = crossing(level, after=n * np.pi / wd)
     mid = crossing(0.5)
-    return SecondOrderExact(100 * peak, 100 * peak**2, crossing(0.9) - crossing(0.1), mid, last - mid)
+    return SecondOrderExact(
+        100 * peak, 100 * peak**2, crossing(0.9) - crossing(0.1), mid, last - mid
+    )
 
 
 def lowpass(y: FloatArray, fs: float, cutoff: float) -> FloatArray:
@@ -115,7 +127,11 @@ def ramp_edges(t: FloatArray, edges: list[tuple[float, float, float]]) -> FloatA
 
 
 def post_region(
-    x: FloatArray, y: FloatArray, metrics, aberration_factor: float = 3.0, state_tolerance: float = 2.0
+    x: FloatArray,
+    y: FloatArray,
+    metrics,
+    aberration_factor: float = 3.0,
+    state_tolerance: float = 2.0,
 ) -> tuple[float, float]:
     """The post-transition aberration region the library measured: from the first sample after the
     edge that has reached the final level (else its band), for aberration_factor edge durations (§C14)."""
@@ -123,8 +139,12 @@ def post_region(
     low, high = metrics.levels
     final = high if edge.polarity > 0 else low
     tol = state_tolerance / 100 * (high - low)
-    distance = int(edge.polarity) * (y[edge.end_index:] - final)
-    reached = np.flatnonzero(distance >= 0) if np.any(distance >= 0) else np.flatnonzero(distance >= -tol)
+    distance = int(edge.polarity) * (y[edge.end_index :] - final)
+    reached = (
+        np.flatnonzero(distance >= 0)
+        if np.any(distance >= 0)
+        else np.flatnonzero(distance >= -tol)
+    )
     start = x[edge.end_index + reached[0]]
     return float(start), float(start + aberration_factor * edge.duration)
 

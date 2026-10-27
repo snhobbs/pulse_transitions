@@ -1,4 +1,5 @@
 """Public functions: validate once, compose the internal modules."""
+
 from __future__ import annotations
 
 import math
@@ -63,7 +64,9 @@ def _find(
     check_choice("mid_method", mid_method, _MID_METHODS)
     xs, ys = as_waveform(y, x, fs, bounds)
     lv = _levels_for(ys, levels)
-    found = find_transitions(xs, ys, _reference.reference_levels(lv, ref), mid_method, lv)
+    found = find_transitions(
+        xs, ys, _reference.reference_levels(lv, ref), mid_method, lv
+    )
     return xs, ys, lv, found
 
 
@@ -72,7 +75,9 @@ def _check_metric_options(aberration_factor: float, state_tolerance: float) -> N
         msg = f"aberration_factor must be > 0, not {aberration_factor!r}"
         raise InputError(msg)
     if not (math.isfinite(state_tolerance) and 0 < state_tolerance < 50):
-        msg = f"state_tolerance must be between 0 and 50 percent, not {state_tolerance!r}"
+        msg = (
+            f"state_tolerance must be between 0 and 50 percent, not {state_tolerance!r}"
+        )
         raise InputError(msg)
 
 
@@ -112,10 +117,16 @@ def state_levels(
         msg = f"split must be (f1, f2) with 0 < f1 <= f2 < 1, not {split!r}"
         raise InputError(msg)
     _, ys = as_waveform(y, x, fs, bounds)
-    if method == "endpoints" and not (isinstance(endpoint_samples, int) and 1 <= endpoint_samples and 2 * endpoint_samples <= len(ys)):
+    if method == "endpoints" and not (
+        isinstance(endpoint_samples, int)
+        and 1 <= endpoint_samples
+        and 2 * endpoint_samples <= len(ys)
+    ):
         msg = f"endpoint_samples must be between 1 and {len(ys) // 2} for {len(ys)} samples, not {endpoint_samples!r}"
         raise InputError(msg)
-    return detect_levels(ys, method, bins, (float(split[0]), float(split[1])), endpoint_samples)
+    return detect_levels(
+        ys, method, bins, (float(split[0]), float(split[1])), endpoint_samples
+    )
 
 
 def transitions(
@@ -187,12 +198,21 @@ def step_metrics(
         LevelError: `levels` is None and the data is constant (§E7).
     """
     found = transition_metrics(
-        y, x=x, fs=fs, levels=levels, reference=reference, bounds=bounds,
-        aberration_factor=aberration_factor, state_tolerance=state_tolerance, mid_method=mid_method,
+        y,
+        x=x,
+        fs=fs,
+        levels=levels,
+        reference=reference,
+        bounds=bounds,
+        aberration_factor=aberration_factor,
+        state_tolerance=state_tolerance,
+        mid_method=mid_method,
     )
     if len(found) != 1:
-        msg = (f"A step has exactly one transition; found {len(found)}. "
-               "Use bounds= to select the step, or transition_metrics() for all of them.")
+        msg = (
+            f"A step has exactly one transition; found {len(found)}. "
+            "Use bounds= to select the step, or transition_metrics() for all of them."
+        )
         raise EdgeNotFoundError(msg)
     return found[0]
 
@@ -217,7 +237,9 @@ def pulses(
     if not isinstance(polarity, Polarity):
         msg = f"polarity must be a Polarity, not {polarity!r}"
         raise InputError(msg)
-    return make_pulses(_find(y, x, fs, levels, reference, bounds, mid_method)[3], polarity)
+    return make_pulses(
+        _find(y, x, fs, levels, reference, bounds, mid_method)[3], polarity
+    )
 
 
 def measure_edge(
@@ -242,7 +264,9 @@ def measure_edge(
     check_choice("mid_method", mid_method, _MID_METHODS)
     lv = None if levels is None else check_levels(levels)
     xs, ys = as_waveform(y, x, fs)
-    return locate_and_measure(xs, ys, float(around), float(max_distance), ref, lv, mid_method)
+    return locate_and_measure(
+        xs, ys, float(around), float(max_distance), ref, lv, mid_method
+    )
 
 
 def flatness(

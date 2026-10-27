@@ -1,4 +1,5 @@
 """State levels (§5.2)."""
+
 from __future__ import annotations
 
 import numpy as np
@@ -52,8 +53,12 @@ def detect_levels(
     lower_stop = int(np.floor(split[0] * bins))
     upper_start = int(np.ceil(split[1] * bins))
     low = _sub_level(method, lower_stop, 0, bins, counts, sums, bin_counts, "lower")
-    high = _sub_level(method, bins, upper_start, bins, counts, sums, bin_counts, "upper")
-    return StateLevels(low=low, high=high, method=method, histogram=counts, bin_edges=edges)
+    high = _sub_level(
+        method, bins, upper_start, bins, counts, sums, bin_counts, "upper"
+    )
+    return StateLevels(
+        low=low, high=high, method=method, histogram=counts, bin_edges=edges
+    )
 
 
 def _sub_level(
@@ -68,7 +73,9 @@ def _sub_level(
 ) -> float:
     """Return the level of one sub-histogram spanning bins ``start`` to ``stop``."""
     if stop <= start:
-        raise LevelError(f"split leaves no bins for the {label} state level; use a smaller split or more bins")
+        raise LevelError(
+            f"split leaves no bins for the {label} state level; use a smaller split or more bins"
+        )
     if method == "mode":
         best = start + int(np.argmax(counts[start:stop]))
         return float(sums[best] / bin_counts[best])

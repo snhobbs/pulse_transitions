@@ -41,7 +41,10 @@ def rms_errors(shape, t: np.ndarray) -> dict[str, float]:
         for method in METHODS:
             edge = pt.transitions(y, x=t, levels=(0.0, 1.0), mid_method=method)[0]
             errors[method].append(edge.mid_instant - truth)
-    return {method: float(np.sqrt(np.mean(np.square(e)))) * 1e3 for method, e in errors.items()}
+    return {
+        method: float(np.sqrt(np.mean(np.square(e)))) * 1e3
+        for method, e in errors.items()
+    }
 
 
 def main() -> None:
@@ -49,32 +52,49 @@ def main() -> None:
     clean, truth = linear_edge(t)
     y = clean + np.random.default_rng(7).normal(0.0, NOISE, t.size)
 
-    fig, (ax, bars) = plt.subplots(1, 2, figsize=(10.5, 4.5), gridspec_kw={"width_ratios": [1.6, 1]})
+    fig, (ax, bars) = plt.subplots(
+        1, 2, figsize=(10.5, 4.5), gridspec_kw={"width_ratios": [1.6, 1]}
+    )
     window = (t > 4.4) & (t < 5.6)
     ax.plot(t[window], y[window], ".", color=SIGNAL, markersize=2.5, label="Samples")
     ax.axhline(0.5, color="#a0aec0", linestyle="--", linewidth=0.9, label="Mid level")
     ax.axvline(truth, color="black", linewidth=1.0, label="True mid instant")
     for method, color in METHODS.items():
         edge = pt.transitions(y, x=t, levels=(0.0, 1.0), mid_method=method)[0]
-        print(f"{method:>6}: mid instant {edge.mid_instant:.4f} us (error {(edge.mid_instant - truth) * 1e3:+.1f} ns)")
-        ax.axvline(edge.mid_instant, color=color, linestyle="--", linewidth=1.3,
-                   label=f'"{method}": {(edge.mid_instant - truth) * 1e3:+.1f} ns')
+        print(
+            f"{method:>6}: mid instant {edge.mid_instant:.4f} us (error {(edge.mid_instant - truth) * 1e3:+.1f} ns)"
+        )
+        ax.axvline(
+            edge.mid_instant,
+            color=color,
+            linestyle="--",
+            linewidth=1.3,
+            label=f'"{method}": {(edge.mid_instant - truth) * 1e3:+.1f} ns',
+        )
     ax.set_xlim(4.4, 5.6)
     ax.set_title("One noisy linear edge, near its mid level")
     ax.set_xlabel("Time (µs)")
     ax.set_ylabel("Amplitude (V)")
     ax.legend(loc="upper left", fontsize=8)
 
-    results = {"Linear edge": rms_errors(linear_edge, t), "RC edge": rms_errors(rc_edge, t)}
+    results = {
+        "Linear edge": rms_errors(linear_edge, t),
+        "RC edge": rms_errors(rc_edge, t),
+    }
     width = 0.25
     for k, (method, color) in enumerate(METHODS.items()):
         values = [results[shape][method] for shape in results]
         positions = np.arange(len(results)) + (k - 1) * width
         bars.bar(positions, values, width, color=color, label=f'"{method}"')
         for position, value in zip(positions, values, strict=True):
-            bars.text(position, value, f"{value:.0f}", ha="center", va="bottom", fontsize=8)
+            bars.text(
+                position, value, f"{value:.0f}", ha="center", va="bottom", fontsize=8
+            )
     for shape, errors in results.items():
-        print(f"{shape}: RMS error " + ", ".join(f"{m} {v:.1f} ns" for m, v in errors.items()))
+        print(
+            f"{shape}: RMS error "
+            + ", ".join(f"{m} {v:.1f} ns" for m, v in errors.items())
+        )
     bars.set_xticks(range(len(results)), list(results))
     bars.set_ylabel(f"RMS mid-instant error (ns), {SEEDS} seeds")
     bars.set_title("Accuracy by edge shape")

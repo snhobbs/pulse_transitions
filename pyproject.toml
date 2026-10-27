@@ -117,7 +117,7 @@ exclude = [
 ]
 line-length = 88
 indent-width = 4
-target-version = "py311"
+target-version = "py310"  # matches requires-python
 
 [tool.ruff.lint]
 select = [
@@ -191,7 +191,6 @@ ignore = [
 	"COM812",  # missing-trailing-comma recommended to remove
 	"ISC001",  # single-line-implicit-string-concatenation recommended to remove
 	"E501",    # line too long
-	"PD901",   # generic names
 	"ERA001",  # commented out code
 ]
 # Allow fix for all enabled rules (when `--fix`) is provided.
@@ -200,11 +199,16 @@ unfixable = []
 # Allow unused variables when underscore-prefixed.
 dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
 
+# ==== Formatting ====
+# Style: `ruff format` (Black-compatible) at the 88-column line-length above, the same as
+# the sibling labcore projects. Run `ruff format src tests examples benchmarks`; CI or a
+# pre-commit hook can check it with `ruff format --check`.
 [tool.ruff.format]
 quote-style = "double"
 indent-style = "space"
 skip-magic-trailing-comma = false
-line-ending = "auto"
+line-ending = "lf"
+docstring-code-format = true  # format the worked examples in docstrings too
 
 [tool.ruff.lint.isort]
 force-single-line = true

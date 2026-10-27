@@ -1,4 +1,5 @@
 """Result records, polarity and the exception hierarchy."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -7,8 +8,17 @@ from enum import IntEnum
 import numpy as np
 
 __all__ = [
-    "Aberration", "EdgeMeasurement", "EdgeNotFoundError", "InputError", "LevelError",
-    "Polarity", "Pulse", "PulseTransitionsError", "StateLevels", "Transition", "TransitionMetrics",
+    "Aberration",
+    "EdgeMeasurement",
+    "EdgeNotFoundError",
+    "InputError",
+    "LevelError",
+    "Polarity",
+    "Pulse",
+    "PulseTransitionsError",
+    "StateLevels",
+    "Transition",
+    "TransitionMetrics",
 ]
 
 
@@ -89,7 +99,9 @@ class Transition:
     @property
     def slew_rate(self) -> float:
         """Return the signed slew rate between the lower and upper reference crossings."""
-        return (self.upper_level - self.lower_level) / (self.upper_instant - self.lower_instant)
+        return (self.upper_level - self.lower_level) / (
+            self.upper_instant - self.lower_instant
+        )
 
 
 @dataclass(frozen=True)

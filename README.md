@@ -191,9 +191,10 @@ Median, first-crossing and least-squares mid instants on a noisy edge, and their
 
 ### Accuracy against the closed form
 
-These measure a synthesised second-order step, `1 - e^(-ζωn t) sin(ωd t + acos ζ) / sqrt(1 - ζ²)`, and compare
-with its exact metrics: the overshoot `100 e^(-πζ / sqrt(1 - ζ²))`, the undershoot (its first trough, the overshoot
-squared), and the rise and settling times by root finding on the closed form.
+These measure synthesised steps whose metrics have a closed form and compare with it. Most use a second-order step,
+`1 - e^(-ζωn t) sin(ωd t + acos ζ) / sqrt(1 - ζ²)`, with the overshoot `100 e^(-πζ / sqrt(1 - ζ²))`, the undershoot
+(its first trough, the overshoot squared), and the rise and settling times by root finding on the closed form; the
+last two use a first-order step and a slew-limited one.
 
 #### Across damping ratios: [analytic_damping.py](examples/analytic_damping.py)
 ζ from 0.1 to 0.95 with 0.5 % RMS noise, low-pass filtered, 30 noise seeds each. Overshoot, undershoot and rise time
@@ -215,6 +216,31 @@ the rise time within 1 % down to about 6 samples per edge; the overshoot is the 
 the peak falls between samples, bounded by the peak half a sample away.
 
 ![analytic_sampling](examples/figures/analytic_sampling.svg)
+
+#### As the ADC gets coarser: [analytic_quantization.py](examples/analytic_quantization.py)
+ζ = 0.5, noiseless, quantised to 4–16 bits with the step at 80 % of full scale. Each error halves with every added
+bit, following half an LSB over the slope at the crossing (one LSB for the overshoot), down to a small floor set by
+the level estimate. The settling time needs an LSB well inside the ±2 % band: below about 7 bits it jumps between
+ringing peaks.
+
+![analytic_quantization](examples/figures/analytic_quantization.svg)
+
+#### First-order (RC) step: [analytic_first_order.py](examples/analytic_first_order.py)
+`1 - e^(-t/τ)` crosses level L at `τ ln(1 / (1 - L))`: rise time `τ ln 9`, 20–80 % `τ ln 4`, settling `τ ln 25`.
+Noise moves each crossing by the noise over the slope, and an RC edge slows as it goes (0.9/τ at 10 %, 0.1/τ at
+90 %, 0.02/τ at the band edge), so the 90 % crossing jitters nine times as much as the 10 % one and the settling
+time reads late. Once the noise exceeds the slope times the sample spacing the level is crossed several times and
+the median crossing (§C7) jitters less than noise / slope.
+
+![analytic_first_order](examples/figures/analytic_first_order.svg)
+
+#### Slew-limited step: [slew_limited.py](examples/slew_limited.py)
+An amplifier with time constant τ and slew rate S ramps at S until the error is Sτ, then settles exponentially;
+`a = V / (Sτ)` takes it from a pure exponential (a < 1) to a ramp (a ≫ 1), with every crossing in closed form. The
+ratio of the 20–80 % to the 10–90 % rise time tells them apart without knowing τ or S: `ln 4 / ln 9 = 0.631` for an
+exponential, 0.75 for a ramp. A measured edge near 0.75 is slewing, and a smaller step will be faster.
+
+![slew_limited](examples/figures/slew_limited.svg)
 
 ### Measured data
 

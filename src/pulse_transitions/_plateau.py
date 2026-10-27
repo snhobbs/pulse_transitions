@@ -1,4 +1,5 @@
 """Flatness of a window."""
+
 from __future__ import annotations
 
 import math
@@ -12,7 +13,9 @@ _FINAL_LEVEL_TOL = 1e-12
 _FINAL_LEVEL_SAMPLES = 10
 
 
-def flatness_of(x: np.ndarray, y: np.ndarray, bounds: tuple[float, float], normalize: bool = True) -> float:
+def flatness_of(
+    x: np.ndarray, y: np.ndarray, bounds: tuple[float, float], normalize: bool = True
+) -> float:
     """Population std-dev of y within bounds, optionally normalised by the record's final level.
 
     x and y are the whole record. The window is the samples with bounds[0] <= x <= bounds[1].

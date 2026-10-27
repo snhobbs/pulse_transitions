@@ -25,10 +25,15 @@ ABERRATION_FACTOR = 5.0
 
 def main() -> None:
     t = np.linspace(0.0, 2.0, 8000)
-    y = sum(sign * second_order_step(t - start, wn=40.0, zeta=0.3) for start, sign in ((0.2, 1), (1.1, -1)))
+    y = sum(
+        sign * second_order_step(t - start, wn=40.0, zeta=0.3)
+        for start, sign in ((0.2, 1), (1.1, -1))
+    )
     y += np.random.default_rng(3).normal(0.0, 0.003, t.size)
 
-    metrics = pt.transition_metrics(y, x=t, state_tolerance=TOLERANCE, aberration_factor=ABERRATION_FACTOR)
+    metrics = pt.transition_metrics(
+        y, x=t, state_tolerance=TOLERANCE, aberration_factor=ABERRATION_FACTOR
+    )
     low, high = metrics[0].levels
     band = (high - low) * TOLERANCE / 100
 
@@ -40,24 +45,71 @@ def main() -> None:
     for item in metrics:
         edge = item.transition
         color = RISING if edge.polarity is pt.Polarity.RISING else FALLING
-        ax.axvspan(*post_region(t, y, item, ABERRATION_FACTOR, TOLERANCE), color=color, alpha=0.1, linewidth=0)
-        print(f"{edge.polarity.name:>7}: overshoot {item.post_overshoot.percent:5.2f} %, "
-              f"undershoot {item.post_undershoot.percent:5.2f} %, settling time {item.settling_time * 1e3:6.1f} ms")
-        for aberration, name, dy in ((item.post_overshoot, "overshoot", 12), (item.post_undershoot, "undershoot", -18)):
+        ax.axvspan(
+            *post_region(t, y, item, ABERRATION_FACTOR, TOLERANCE),
+            color=color,
+            alpha=0.1,
+            linewidth=0,
+        )
+        print(
+            f"{edge.polarity.name:>7}: overshoot {item.post_overshoot.percent:5.2f} %, "
+            f"undershoot {item.post_undershoot.percent:5.2f} %, settling time {item.settling_time * 1e3:6.1f} ms"
+        )
+        for aberration, name, dy in (
+            (item.post_overshoot, "overshoot", 12),
+            (item.post_undershoot, "undershoot", -18),
+        ):
             if edge.polarity is pt.Polarity.FALLING:
                 dy = -dy
-            ax.plot(aberration.instant, aberration.value, "v" if dy > 0 else "^", color=color, markersize=7)
-            ax.annotate(f"{name} {aberration.percent:.1f} %", (aberration.instant, aberration.value),
-                        xytext=(6, dy), textcoords="offset points", fontsize=8, color=color)
+            ax.plot(
+                aberration.instant,
+                aberration.value,
+                "v" if dy > 0 else "^",
+                color=color,
+                markersize=7,
+            )
+            ax.annotate(
+                f"{name} {aberration.percent:.1f} %",
+                (aberration.instant, aberration.value),
+                xytext=(6, dy),
+                textcoords="offset points",
+                fontsize=8,
+                color=color,
+            )
         settle = edge.mid_instant + item.settling_time
-        ax.annotate("", xy=(settle, 0.5), xytext=(edge.mid_instant, 0.5),
-                    arrowprops={"arrowstyle": "<->", "color": color, "linewidth": 1.0})
-        ax.text((edge.mid_instant + settle) / 2, 0.52, f"settling time {item.settling_time * 1e3:.0f} ms",
-                ha="center", va="bottom", fontsize=8, color=color)
+        ax.annotate(
+            "",
+            xy=(settle, 0.5),
+            xytext=(edge.mid_instant, 0.5),
+            arrowprops={"arrowstyle": "<->", "color": color, "linewidth": 1.0},
+        )
+        ax.text(
+            (edge.mid_instant + settle) / 2,
+            0.52,
+            f"settling time {item.settling_time * 1e3:.0f} ms",
+            ha="center",
+            va="bottom",
+            fontsize=8,
+            color=color,
+        )
         ax.axvline(settle, color=color, linestyle=":", linewidth=1.0)
 
-    ax.plot([], [], color=ACCENT, alpha=0.3, linewidth=6, label=f"±{TOLERANCE:g} % settling band")
-    ax.plot([], [], color=SIGNAL, alpha=0.2, linewidth=6, label="Post-transition aberration region")
+    ax.plot(
+        [],
+        [],
+        color=ACCENT,
+        alpha=0.3,
+        linewidth=6,
+        label=f"±{TOLERANCE:g} % settling band",
+    )
+    ax.plot(
+        [],
+        [],
+        color=SIGNAL,
+        alpha=0.2,
+        linewidth=6,
+        label="Post-transition aberration region",
+    )
     ax.plot([], [], ":", color=SIGNAL, label="Settling instant")
     ax.set_title("transition_metrics: aberrations and settling time of each edge")
     ax.set_xlabel("Time (s)")

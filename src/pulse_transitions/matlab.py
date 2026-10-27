@@ -1,4 +1,5 @@
 """MATLAB-named facade over the public API."""
+
 from __future__ import annotations
 
 import math
@@ -12,8 +13,18 @@ from ._types import Aberration, Polarity, Pulse, Transition
 from ._validate import check_choice, check_reference
 
 __all__ = [
-    "dutycycle", "falltime", "midcross", "overshoot", "pulseperiod", "pulsesep", "pulsewidth",
-    "risetime", "settlingtime", "slewrate", "statelevels", "undershoot",
+    "dutycycle",
+    "falltime",
+    "midcross",
+    "overshoot",
+    "pulseperiod",
+    "pulsesep",
+    "pulsewidth",
+    "risetime",
+    "settlingtime",
+    "slewrate",
+    "statelevels",
+    "undershoot",
 ]
 
 
@@ -48,7 +59,9 @@ def _pulses(
     """Pulses of MATLAB `polarity` ("positive" is rising, "negative" falling) from the API."""
     choice = check_choice("polarity", polarity, ("positive", "negative"))
     direction = Polarity.RISING if choice == "positive" else Polarity.FALLING
-    return _api.pulses(y, x=t, fs=fs, levels=levels, polarity=direction, mid_method=mid_method)
+    return _api.pulses(
+        y, x=t, fs=fs, levels=levels, polarity=direction, mid_method=mid_method
+    )
 
 
 def _edge_times(
@@ -64,7 +77,13 @@ def _edge_times(
     triple = _triple(reference)
     state = _levels(y, t, fs, levels)
     found = _api.transitions(
-        y, x=t, fs=fs, levels=state, reference=triple, polarity=direction, mid_method=mid_method,
+        y,
+        x=t,
+        fs=fs,
+        levels=state,
+        reference=triple,
+        polarity=direction,
+        mid_method=mid_method,
     )
     lower, _, upper = _api.reference_levels(state, triple)
     return (
@@ -76,7 +95,9 @@ def _edge_times(
     )
 
 
-def _aberration_arrays(aberrations: Sequence[Aberration]) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+def _aberration_arrays(
+    aberrations: Sequence[Aberration],
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """(percent, value, instant) arrays of a sequence of aberrations."""
     return (
         _array([item.percent for item in aberrations]),
@@ -85,7 +106,9 @@ def _aberration_arrays(aberrations: Sequence[Aberration]) -> tuple[np.ndarray, n
     )
 
 
-def _cycle_timing(complete: Sequence[Pulse]) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+def _cycle_timing(
+    complete: Sequence[Pulse],
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """(initcross, finalcross, nextcross) of pulses with a period, nextcross = initcross + period."""
     initcross = _array([item.first.mid_instant for item in complete])
     finalcross = _array([item.second.mid_instant for item in complete])
@@ -93,7 +116,9 @@ def _cycle_timing(complete: Sequence[Pulse]) -> tuple[np.ndarray, np.ndarray, np
     return initcross, finalcross, initcross + periods
 
 
-def statelevels(y: ArrayLike, nbins: int = 100, method: str = "mode") -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+def statelevels(
+    y: ArrayLike, nbins: int = 100, method: str = "mode"
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """MATLAB [levels, histogram, bin centres] = statelevels(y, nbins, method)."""
     state = _api.state_levels(y, bins=nbins, method=method)
     levels = _array([state.low, state.high])
@@ -153,7 +178,12 @@ def slewrate(
 ) -> np.ndarray:
     """MATLAB slewrate(y, t): signed slew rate of every transition."""
     found = _api.transitions(
-        y, x=t, fs=fs, levels=levels, reference=_triple(reference), mid_method=mid_method,
+        y,
+        x=t,
+        fs=fs,
+        levels=levels,
+        reference=_triple(reference),
+        mid_method=mid_method,
     )
     return _array([edge.slew_rate for edge in found])
 
@@ -167,7 +197,9 @@ def overshoot(
     mid_method: str = "median",
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """MATLAB [pct, val, t] = overshoot(y, t): post-transition overshoot of every transition."""
-    metrics = _api.transition_metrics(y, x=t, fs=fs, levels=levels, mid_method=mid_method)
+    metrics = _api.transition_metrics(
+        y, x=t, fs=fs, levels=levels, mid_method=mid_method
+    )
     return _aberration_arrays([item.post_overshoot for item in metrics])
 
 
@@ -180,7 +212,9 @@ def undershoot(
     mid_method: str = "median",
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """MATLAB [pct, val, t] = undershoot(y, t): post-transition undershoot of every transition."""
-    metrics = _api.transition_metrics(y, x=t, fs=fs, levels=levels, mid_method=mid_method)
+    metrics = _api.transition_metrics(
+        y, x=t, fs=fs, levels=levels, mid_method=mid_method
+    )
     return _aberration_arrays([item.post_undershoot for item in metrics])
 
 
@@ -195,7 +229,12 @@ def settlingtime(
 ) -> np.ndarray:
     """MATLAB settlingtime(y, d, t): settling time of every transition to within d percent."""
     metrics = _api.transition_metrics(
-        y, x=t, fs=fs, levels=levels, state_tolerance=d, mid_method=mid_method,
+        y,
+        x=t,
+        fs=fs,
+        levels=levels,
+        state_tolerance=d,
+        mid_method=mid_method,
     )
     return _array([item.settling_time for item in metrics])
 
@@ -264,4 +303,9 @@ def dutycycle(
     found = _pulses(y, t, fs, levels, polarity, mid_method)
     complete = [item for item in found if math.isfinite(item.period)]
     initcross, finalcross, nextcross = _cycle_timing(complete)
-    return _array([item.duty_cycle for item in complete]), initcross, finalcross, nextcross
+    return (
+        _array([item.duty_cycle for item in complete]),
+        initcross,
+        finalcross,
+        nextcross,
+    )

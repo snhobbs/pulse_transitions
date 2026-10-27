@@ -1,4 +1,5 @@
 """Percent reference levels (§5.3.2) and interpolated instants (§5.3.3)."""
+
 from __future__ import annotations
 
 import numpy as np
@@ -41,7 +42,9 @@ def interpolate_instant(
     dy = y1_arr - y0_arr
     flat = dy == 0.0
     safe_dy = np.where(flat, 1.0, dy)
-    result = np.where(flat, x0_arr, x0_arr + (x1_arr - x0_arr) * (level_arr - y0_arr) / safe_dy)
+    result = np.where(
+        flat, x0_arr, x0_arr + (x1_arr - x0_arr) * (level_arr - y0_arr) / safe_dy
+    )
 
     if result.ndim == 0:
         return float(result)

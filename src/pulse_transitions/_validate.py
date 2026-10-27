@@ -1,4 +1,5 @@
 """Input coercion and checks at the public boundary."""
+
 from __future__ import annotations
 
 import math
@@ -19,9 +20,13 @@ def _as_numeric_1d(value: object, name: str) -> np.ndarray:
     try:
         array = np.asarray(value)
     except (TypeError, ValueError) as error:
-        raise InputError(f"{name} must be a 1-D numeric array, got {value!r}") from error
+        raise InputError(
+            f"{name} must be a 1-D numeric array, got {value!r}"
+        ) from error
     if array.ndim != 1 or array.dtype.kind not in _NUMERIC_KINDS:
-        raise InputError(f"{name} must be a 1-D numeric array, got shape {array.shape} and dtype {array.dtype}")
+        raise InputError(
+            f"{name} must be a 1-D numeric array, got shape {array.shape} and dtype {array.dtype}"
+        )
     return array.astype(np.float64)
 
 
@@ -40,7 +45,9 @@ def _real_sequence(value: object, count: int, name: str) -> tuple[float, ...]:
     try:
         items = tuple(value)  # type: ignore[call-overload]
     except TypeError as error:
-        raise InputError(f"{name} must be {count} finite numbers, got {value!r}") from error
+        raise InputError(
+            f"{name} must be {count} finite numbers, got {value!r}"
+        ) from error
     parsed = tuple(_finite_real(item) for item in items)
     numbers_only = tuple(number for number in parsed if number is not None)
     if len(parsed) != count or len(numbers_only) != count:
@@ -79,7 +86,9 @@ def as_waveform(
     elif x is not None:
         x_array = _as_numeric_1d(x, "x")
         if x_array.size != y_array.size:
-            raise InputError(f"x must have the same length as y, got {x_array.size} and {y_array.size}")
+            raise InputError(
+                f"x must have the same length as y, got {x_array.size} and {y_array.size}"
+            )
     else:
         x_array = np.arange(y_array.size, dtype=np.float64)
 
@@ -103,7 +112,9 @@ def as_waveform(
         y_array = y_array[window]
 
     if x_array.size < 2:
-        raise InputError(f"y must have at least 2 samples after NaN removal and bounds, got {x_array.size}")
+        raise InputError(
+            f"y must have at least 2 samples after NaN removal and bounds, got {x_array.size}"
+        )
     return x_array, y_array
 
 
@@ -125,12 +136,16 @@ def check_reference(reference: object, *, pair: bool = False) -> tuple[float, ..
         values = _real_sequence(reference, 2, "reference")
         lower, upper = values
         if not 0 <= lower < upper <= 100:
-            raise InputError(f"reference must satisfy 0 <= lower < upper <= 100 for pairs, got {reference!r}")
+            raise InputError(
+                f"reference must satisfy 0 <= lower < upper <= 100 for pairs, got {reference!r}"
+            )
         return values
     values = _real_sequence(reference, 3, "reference")
     lower, mid, upper = values
     if not 0 <= lower < mid < upper <= 100:
-        raise InputError(f"reference must satisfy 0 <= lower < mid < upper <= 100, got {reference!r}")
+        raise InputError(
+            f"reference must satisfy 0 <= lower < mid < upper <= 100, got {reference!r}"
+        )
     return values
 
 

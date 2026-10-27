@@ -1,4 +1,5 @@
 """Pulses from alternating transitions (§5.4)."""
+
 from __future__ import annotations
 
 import math
@@ -8,7 +9,9 @@ from ._types import Polarity, Pulse, Transition
 __all__ = ["make_pulses"]
 
 
-def make_pulses(transitions: tuple[Transition, ...], polarity: Polarity = Polarity.RISING) -> tuple[Pulse, ...]:
+def make_pulses(
+    transitions: tuple[Transition, ...], polarity: Polarity = Polarity.RISING
+) -> tuple[Pulse, ...]:
     """Build the pulses that start at each transition of the given polarity.
 
     A pulse starts at transition ``i`` of ``polarity`` when transition ``i + 1`` exists.
@@ -42,13 +45,15 @@ def make_pulses(transitions: tuple[Transition, ...], polarity: Polarity = Polari
             period = math.nan
             separation = math.nan
             duty_cycle = math.nan
-        pulses.append(Pulse(
-            polarity=polarity,
-            first=first,
-            second=second,
-            width=width,
-            period=period,
-            separation=separation,
-            duty_cycle=duty_cycle,
-        ))
+        pulses.append(
+            Pulse(
+                polarity=polarity,
+                first=first,
+                second=second,
+                width=width,
+                period=period,
+                separation=separation,
+                duty_cycle=duty_cycle,
+            )
+        )
     return tuple(pulses)

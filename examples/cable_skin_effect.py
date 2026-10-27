@@ -17,7 +17,12 @@ import numpy as np
 import pulse_transitions as pt
 from _plot import SIGNAL, load_csv, save
 
-METHODS = {"mode": "#2b6cb0", "mean": "#2f855a", "peak": "#c05621", "endpoints": "#805ad5"}
+METHODS = {
+    "mode": "#2b6cb0",
+    "mean": "#2f855a",
+    "peak": "#c05621",
+    "endpoints": "#805ad5",
+}
 REFERENCES = {"10–90 %": (10, 50, 90), "20–80 %": (20, 50, 80)}
 
 
@@ -25,16 +30,31 @@ def main() -> None:
     data = load_csv("rg58_50m_open.csv")
     t, y = data["time_ps"] / 1e3, data["open_V"]  # ns
 
-    fig, (ax, bars) = plt.subplots(1, 2, figsize=(10.5, 4.5), gridspec_kw={"width_ratios": [1.6, 1]})
+    fig, (ax, bars) = plt.subplots(
+        1, 2, figsize=(10.5, 4.5), gridspec_kw={"width_ratios": [1.6, 1]}
+    )
     ax.plot(t, y, color=SIGNAL, linewidth=0.8)
     rise_times = {}
     for method, color in METHODS.items():
         levels = pt.state_levels(y, x=t, method=method)
-        rise_times[method] = [pt.transitions(y, x=t, levels=levels.levels, reference=ref)[0].duration
-                              for ref in REFERENCES.values()]
-        print(f"{method:>9}: high {levels.high:.3f} V, " +
-              ", ".join(f"{name} rise {d:.1f} ns" for name, d in zip(REFERENCES, rise_times[method], strict=True)))
-        ax.axhline(levels.high, color=color, linestyle="--", linewidth=1.0, label=f"{method}: high {levels.high:.3f} V")
+        rise_times[method] = [
+            pt.transitions(y, x=t, levels=levels.levels, reference=ref)[0].duration
+            for ref in REFERENCES.values()
+        ]
+        print(
+            f"{method:>9}: high {levels.high:.3f} V, "
+            + ", ".join(
+                f"{name} rise {d:.1f} ns"
+                for name, d in zip(REFERENCES, rise_times[method], strict=True)
+            )
+        )
+        ax.axhline(
+            levels.high,
+            color=color,
+            linestyle="--",
+            linewidth=1.0,
+            label=f"{method}: high {levels.high:.3f} V",
+        )
         ax.axhline(levels.low, color=color, linestyle="--", linewidth=1.0)
     ax.set_title("50 m RG58, open end: where is the top?")
     ax.set_xlabel("Time (ns)")
@@ -43,11 +63,15 @@ def main() -> None:
 
     width = 0.38
     positions = np.arange(len(METHODS))
-    for k, (name, shade) in enumerate(zip(REFERENCES, ("#4a5568", "#a0aec0"), strict=True)):
+    for k, (name, shade) in enumerate(
+        zip(REFERENCES, ("#4a5568", "#a0aec0"), strict=True)
+    ):
         values = [rise_times[m][k] for m in METHODS]
         bars.bar(positions + (k - 0.5) * width, values, width, color=shade, label=name)
         for position, value in zip(positions + (k - 0.5) * width, values, strict=True):
-            bars.text(position, value, f"{value:.0f}", ha="center", va="bottom", fontsize=8)
+            bars.text(
+                position, value, f"{value:.0f}", ha="center", va="bottom", fontsize=8
+            )
     bars.set_xticks(positions, list(METHODS))
     bars.set_xlabel("state_levels method")
     bars.set_ylabel("Rise time (ns)")

@@ -1,4 +1,5 @@
 """Vectorised hysteresis transition finder, shared by every feature."""
+
 from __future__ import annotations
 
 import numpy as np
@@ -15,7 +16,13 @@ def _crossings(above: np.ndarray) -> np.ndarray:
 
 
 def _median_instant(
-    x: np.ndarray, y: np.ndarray, crossing: np.ndarray, lo: np.ndarray, hi: np.ndarray, level: float, pick_median: bool
+    x: np.ndarray,
+    y: np.ndarray,
+    crossing: np.ndarray,
+    lo: np.ndarray,
+    hi: np.ndarray,
+    level: float,
+    pick_median: bool,
 ) -> np.ndarray:
     """Interpolated instant of the median (or first) crossing in segments lo .. hi-1 of each window."""
     first = np.searchsorted(crossing, lo, side="left")
@@ -25,15 +32,21 @@ def _median_instant(
 
 
 def _fitted_instants(
-    x: np.ndarray, y: np.ndarray, i: np.ndarray, j: np.ndarray, rising: np.ndarray, level: float,
-    start: np.ndarray, end: np.ndarray,
+    x: np.ndarray,
+    y: np.ndarray,
+    i: np.ndarray,
+    j: np.ndarray,
+    rising: np.ndarray,
+    level: float,
+    start: np.ndarray,
+    end: np.ndarray,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Mid-level instant of a least-squares line through samples i .. j of each transition, clamped
     to [start, end]; NaN where the slope isn't finite or has the wrong sign. Also returns the mask of
     usable fits."""
     instant = np.full(len(i), np.nan)
     for n in range(len(i)):
-        xs, ys = x[i[n]:j[n] + 1], y[i[n]:j[n] + 1]
+        xs, ys = x[i[n] : j[n] + 1], y[i[n] : j[n] + 1]
         x_mean, y_mean = xs.mean(), ys.mean()
         xc = xs - x_mean
         with np.errstate(divide="ignore", invalid="ignore"):
@@ -107,22 +120,40 @@ def find_transitions(
     if state_levels is not None:
         low, high = state_levels
         at_low, at_high = y <= low, y >= high
-        reach_back = np.where(rising, _last_at_or_before(at_low)[i], _last_at_or_before(at_high)[i])
+        reach_back = np.where(
+            rising, _last_at_or_before(at_low)[i], _last_at_or_before(at_high)[i]
+        )
         previous_end = np.r_[0, j[:-1]]
         a = np.where(reach_back >= previous_end, reach_back, i)
-        reach_on = np.where(rising, _first_at_or_after(at_high)[j], _first_at_or_after(at_low)[j])
+        reach_on = np.where(
+            rising, _first_at_or_after(at_high)[j], _first_at_or_after(at_low)[j]
+        )
         next_start = np.r_[i[1:], len(y) - 1]
         b = np.where(reach_on <= next_start, reach_on, j)
 
     # A segment crosses the lower level where `y > lower` changes and the upper level where
     # `y >= upper` changes, matching the state definitions; each window holds an odd count.
     lower_instant = _median_instant(
-        x, y, _crossings(y > lower), np.where(rising, a, i), np.where(rising, j, b), lower, True
+        x,
+        y,
+        _crossings(y > lower),
+        np.where(rising, a, i),
+        np.where(rising, j, b),
+        lower,
+        True,
     )
     upper_instant = _median_instant(
-        x, y, _crossings(y >= upper), np.where(rising, i, a), np.where(rising, b, j), upper, True
+        x,
+        y,
+        _crossings(y >= upper),
+        np.where(rising, i, a),
+        np.where(rising, b, j),
+        upper,
+        True,
     )
-    mid_instant = _median_instant(x, y, _crossings(y >= mid), i, j, mid, mid_method != "first")
+    mid_instant = _median_instant(
+        x, y, _crossings(y >= mid), i, j, mid, mid_method != "first"
+    )
     methods = np.full(len(i), mid_method, dtype=object)
     if mid_method == "fit":
         # Least-squares line through i .. j (rev 5); the median crossing stands in where the fit can't be used.

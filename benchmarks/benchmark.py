@@ -4,6 +4,7 @@ Run from the project root:
 
     PYTHONPATH=src python benchmarks/benchmark.py
 """
+
 from __future__ import annotations
 
 import time
@@ -23,12 +24,18 @@ V02_RISETIME = {10_000: "3.6", 100_000: "37", 1_000_000: "373"}
 V02_MEASURE_EDGE = {10_000: "3.6", 100_000: "fails", 1_000_000: "fails"}
 
 
-def pulse_train(n: int, periods: int = 10, noise: float = 0.01, seed: int = 0) -> tuple[np.ndarray, np.ndarray]:
+def pulse_train(
+    n: int, periods: int = 10, noise: float = 0.01, seed: int = 0
+) -> tuple[np.ndarray, np.ndarray]:
     """Pulse train with 20 edges over `periods` periods, Gaussian noise, and a fixed seed."""
     rng = np.random.default_rng(seed)
     x = np.linspace(0, periods, n)
     ph = x % 1.0
-    y = np.clip((ph - 0.2) / 0.02, 0, 1) - np.clip((ph - 0.6) / 0.02, 0, 1) + noise * rng.standard_normal(n)
+    y = (
+        np.clip((ph - 0.2) / 0.02, 0, 1)
+        - np.clip((ph - 0.6) / 0.02, 0, 1)
+        + noise * rng.standard_normal(n)
+    )
     return x, y
 
 
@@ -51,18 +58,26 @@ def main() -> None:
         x, y = pulse_train(n)
         lv = pt.state_levels(y).levels
         rows = (
-            ("state_levels (v0.2 levels)",
-             best_of_ms(lambda: pt.state_levels(y)),
-             V02_LEVELS[n]),
-            ("transitions (v0.2 detect_edges)",
-             best_of_ms(lambda: pt.transitions(y, x=x, levels=lv)),
-             V02_DETECT_EDGES[n]),
-            ("step_metrics (v0.2 risetime)",
-             best_of_ms(lambda: pt.step_metrics(y, x=x, bounds=(0, 0.5))),
-             V02_RISETIME[n]),
-            ("measure_edge (around=0.2)",
-             best_of_ms(lambda: pt.measure_edge(y, x=x, around=0.2)),
-             V02_MEASURE_EDGE[n]),
+            (
+                "state_levels (v0.2 levels)",
+                best_of_ms(lambda: pt.state_levels(y)),
+                V02_LEVELS[n],
+            ),
+            (
+                "transitions (v0.2 detect_edges)",
+                best_of_ms(lambda: pt.transitions(y, x=x, levels=lv)),
+                V02_DETECT_EDGES[n],
+            ),
+            (
+                "step_metrics (v0.2 risetime)",
+                best_of_ms(lambda: pt.step_metrics(y, x=x, bounds=(0, 0.5))),
+                V02_RISETIME[n],
+            ),
+            (
+                "measure_edge (around=0.2)",
+                best_of_ms(lambda: pt.measure_edge(y, x=x, around=0.2)),
+                V02_MEASURE_EDGE[n],
+            ),
         )
         print(f"\nn = {n:,} samples")
         print(header)

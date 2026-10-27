@@ -17,7 +17,12 @@ import numpy as np
 import pulse_transitions as pt
 from _plot import SIGNAL, second_order_step, save
 
-METHODS = {"mode": "#2b6cb0", "mean": "#2f855a", "peak": "#c05621", "endpoints": "#805ad5"}
+METHODS = {
+    "mode": "#2b6cb0",
+    "mean": "#2f855a",
+    "peak": "#c05621",
+    "endpoints": "#805ad5",
+}
 
 
 def main() -> None:
@@ -33,19 +38,34 @@ def main() -> None:
         print(f"{method:>9}: low {levels.low:+.3f} V, high {levels.high:+.3f} V")
 
     fig, (ax, hist) = plt.subplots(
-        1, 2, sharey=True, figsize=(10, 4.5), gridspec_kw={"width_ratios": [3, 1], "wspace": 0.05}
+        1,
+        2,
+        sharey=True,
+        figsize=(10, 4.5),
+        gridspec_kw={"width_ratios": [3, 1], "wspace": 0.05},
     )
     ax.plot(t, y, color=SIGNAL, linewidth=0.8, label="Signal")
 
     mode = results["mode"]
     edges = mode.bin_edges
-    hist.barh((edges[:-1] + edges[1:]) / 2, mode.histogram, height=np.diff(edges), color="#cbd5e0")
+    hist.barh(
+        (edges[:-1] + edges[1:]) / 2,
+        mode.histogram,
+        height=np.diff(edges),
+        color="#cbd5e0",
+    )
     for method, color in METHODS.items():
         levels = results[method]
         for value in levels.levels:
             for axis in (ax, hist):
                 axis.axhline(value, color=color, linestyle="--", linewidth=1.1)
-        ax.plot([], [], color=color, linestyle="--", label=f"{method}: {levels.low:.2f} / {levels.high:.2f} V")
+        ax.plot(
+            [],
+            [],
+            color=color,
+            linestyle="--",
+            label=f"{method}: {levels.low:.2f} / {levels.high:.2f} V",
+        )
 
     ax.set_title("state_levels: low and high state of each method")
     ax.set_xlabel("Time (s)")
